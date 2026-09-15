@@ -1,0 +1,20 @@
+================================================================================
+BHARAT ELECTRONICS LIMITED (BEL) - SECRET TECHNICAL PROTOCOL
+DOCUMENT ID: BEL-PROTO-EW-LAB-01
+CLASSIFICATION LEVEL: SECRET
+FACILITY: ELECTRONIC WARFARE LAB (GHAZIABAD FACILITY)
+================================================================================
+
+1. DIRECTIVE OVERVIEW:
+This document details countermeasure signal synthesis protocols for airborne 
+radar deception jamming platforms (Project VARUNA).
+
+2. COUNTERMEASURE MODES:
+- Mode Delta: Digital Radio Frequency Memory (DRFM) coherent pulse repeat.
+- Mode Sierra: Cross-eye angular deception array steering.
+- Mode Omega: Noise barrage across 2.4 - 18 GHz spectrum.
+
+3. INTEGRITY ASSURANCE:
+Modification of this document invalidates on-chain hash anchors and trips 
+automatic tamper alerts across the BEL defensive ledger.
+================================================================================

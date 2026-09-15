@@ -1,0 +1,17 @@
+================================================================================
+BHARAT ELECTRONICS LIMITED (BEL) - ASSET SCHEMATIC & MAINTENANCE LOG
+ASSET IDENTIFIER: BEL-ASSET-NFT-001 (RADAR UNIT RU-204)
+MANUFACTURE BATCH: BEL-BLR-2026-B7
+CUSTODY SPECIFICATION: DEFENSE GRADE HARDWARE NFT
+================================================================================
+
+1. HARDWARE COMPONENT BREAKDOWN:
+- Module A: Transmit/Receive Multi-Chip Modules (TRMCM) x 64 arrays
+- Module B: Gallium Nitride (GaN) Power Amplifiers (Efficiency: 54%)
+- Module C: Ultra-low phase noise local oscillator synthesizer (BEL-SYN-88)
+
+2. CUSTODY & CHAIN-OF-TITLE POLICY:
+Physical possession of RU-204 must match the on-chain ERC-721 token owner DID.
+Unauthorized transfer or physical movement without recorded ledger transfer is
+strictly prohibited under Defense Assets Custody Protocol 44-A.
+================================================================================

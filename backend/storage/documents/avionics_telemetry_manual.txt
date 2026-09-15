@@ -1,0 +1,16 @@
+================================================================================
+BHARAT ELECTRONICS LIMITED (BEL) - CONFIDENTIAL OPERATIONAL MANUAL
+DOCUMENT ID: BEL-MAN-AVIONICS-09
+CLASSIFICATION LEVEL: CONFIDENTIAL
+FACILITY: AVIONICS TELEMETRY HUB (HYDERABAD FACILITY)
+================================================================================
+
+1. SYSTEM INTERFACE:
+MIL-STD-1553B Dual Redundant Data Bus architecture.
+Real-time downlink baud rate: 10 Mbps over authenticated S-Band transponder.
+
+2. FLIGHT TELEMETRY CHANNELS:
+- Channel 01-08: Structural strain gauge readings
+- Channel 09-16: Inertial navigation unit gyroscopic deltas
+- Channel 17-24: Fuel manifold pressure and turbine blade temperature sensors
+================================================================================

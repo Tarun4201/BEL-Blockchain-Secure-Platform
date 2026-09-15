@@ -1,0 +1,26 @@
+================================================================================
+BHARAT ELECTRONICS LIMITED (BEL) - RESTRICTED TECHNICAL SPECIFICATION
+DOCUMENT ID: BEL-SPEC-RADAR-BAY-03
+CLASSIFICATION LEVEL: RESTRICTED
+FACILITY: RADAR TEST BAY 3 (BENGALURU FACILITY)
+================================================================================
+
+1. SYSTEM DESCRIPTION:
+The Radar Test Bay 3 houses the prototype validation unit for high-frequency 
+active electronically scanned array (AESA) systems. Operating frequency range: 
+8.5 GHz - 10.68 GHz (X-band).
+
+2. ACCESS PROTOCOLS:
+- Authorized personnel must possess valid cryptographic DID authentication.
+- All telemetry and calibration data feeds are digitally signed.
+- Physical interlocks disengage only upon verified smart-contract grant.
+
+3. HARDWARE TELEMETRY & EMISSION LIMITS:
+- Peak RF Output: 4.2 kW pulsed
+- Waveguide Pressurization: 18.5 PSI dry nitrogen
+- Cooling Loop Temperature: 18.2 C nominal, cutoff at 34.0 C
+
+4. EMERGENCY PROCEDURES:
+In the event of anomalous RF leakage, initiate Phase-Lock Abort (Code 99-Echo).
+All logs are cryptographically sealed and broadcast to the BEL Audit Ledger.
+================================================================================
