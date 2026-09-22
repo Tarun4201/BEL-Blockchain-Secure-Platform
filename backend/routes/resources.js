@@ -8,6 +8,8 @@ const { computeFileHash, verifyDocumentIntegrity } = require("../utils/hasher");
 
 const DOCS_DIR = path.join(__dirname, "..", "storage", "documents");
 
+const withoutHashFields = ({ document_hash, documentHash, ...resource }) => resource;
+
 /**
  * GET /api/resources
  * List all defined protected defense resources
@@ -15,7 +17,7 @@ const DOCS_DIR = path.join(__dirname, "..", "storage", "documents");
 router.get("/", async (req, res) => {
   try {
     const resources = await all("SELECT * FROM resources_meta ORDER BY created_at ASC");
-    res.json(resources);
+    res.json(resources.map(withoutHashFields));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -37,18 +39,17 @@ router.get("/:id", async (req, res) => {
       const contract = getContract("AccessControlManager");
       const onChain = await contract.getResource(id);
       return res.json({
-        ...resource,
+        ...withoutHashFields(resource),
         onChain: {
           resourceId: onChain[0],
           sensitivityLabel: onChain[1],
-          documentHash: onChain[2],
           createdBy: onChain[3],
           createdAt: Number(onChain[4]),
           isVerifiedOnChain: true,
         },
       });
     } catch {
-      return res.json(resource);
+      return res.json(withoutHashFields(resource));
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -108,12 +109,9 @@ router.get("/:id/content", async (req, res) => {
       resourceId: id,
       title: resource.title,
       sensitivityLabel: resource.sensitivity_label,
-      documentHash: resource.document_hash,
       documentContent,
       integrityCheck: {
         verified: integrityCheck.matches,
-        computedHash: integrityCheck.computedHash,
-        onChainAnchoredHash: integrityCheck.onChainHash,
         status: integrityCheck.matches
           ? "CRYPTOGRAPHICALLY VERIFIED - NO TAMPERING DETECTED"
           : "INTEGRITY VIOLATION DETECTED",
@@ -147,11 +145,9 @@ router.get("/:id/verify-integrity", async (req, res) => {
     res.json({
       resourceId: id,
       filename: resource.document_filename,
-      onChainHash: result.onChainHash,
-      computedOffChainHash: result.computedHash,
       integrityVerified: result.matches,
       tamperEvidentVerdict: result.matches
-        ? "PASSED: Document matches on-chain blockchain hash exactly."
+        ? "PASSED: Document matches its protected integrity anchor."
         : "FAILED: Document has been altered off-chain!",
     });
   } catch (err) {
@@ -213,8 +209,6 @@ router.post("/", async (req, res) => {
       status: "confirmed",
       message: "Resource successfully created and anchored on-chain",
       resourceId,
-      documentHash: docHash,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
     });
   } catch (err) {

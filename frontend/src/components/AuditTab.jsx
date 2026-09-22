@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
-import { HashBadge, VerifyModal } from './VerifyModal';
 
 const EVENT_TYPES = ['ALL', 'IdentityRegistered', 'RoleAssigned', 'ResourceCreated', 'AccessRequested', 'AccessGranted', 'AccessRevoked', 'AssetMinted', 'AssetTransferred', 'AssetRetired'];
 
@@ -16,6 +15,23 @@ function eventColor(type) {
   return 'var(--accent-cyan)';
 }
 
+function targetLabel(event) {
+  const target = event?.target_id;
+  if (target === '[object Object]') {
+    if (event.event_type === 'ResourceCreated') return 'Protected resource';
+    if (event.event_type === 'IdentityRegistered' || event.event_type === 'RoleAssigned') return 'Personnel identity';
+    return 'Platform event';
+  }
+  if (typeof target === 'string' || typeof target === 'number') return String(target);
+  if (target?.resourceId) return target.resourceId;
+  if (target?.assetId !== undefined) return `Asset #${target.assetId}`;
+  if (target && typeof target === 'object') {
+    const value = Object.values(target).find((item) => typeof item === 'string' || typeof item === 'number');
+    if (value !== undefined) return String(value);
+  }
+  return '—';
+}
+
 export function AuditTab({ activePersona }) {
   const [events, setEvents] = useState([]);
   const [total, setTotal] = useState(0);
@@ -23,7 +39,6 @@ export function AuditTab({ activePersona }) {
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildResult, setRebuildResult] = useState(null);
   const [filter, setFilter] = useState({ eventType: 'ALL', search: '' });
-  const [verifyTx, setVerifyTx] = useState(null);
   const isAdmin = activePersona?.role === 'ADMIN';
 
   const load = useCallback(async () => {
@@ -62,8 +77,6 @@ export function AuditTab({ activePersona }) {
 
   return (
     <div className="page">
-      {verifyTx && <VerifyModal txHash={verifyTx} onClose={() => setVerifyTx(null)} />}
-
       <div className="page-header flex-between">
         <div>
           <div className="page-title">Immutable Audit Trail</div>
@@ -119,7 +132,7 @@ export function AuditTab({ activePersona }) {
             </select>
           </div>
           <div style={{ flex: '2 1 300px' }}>
-            <label className="form-label">Search (DID, resource, tx hash…)</label>
+            <label className="form-label">Search (DID, resource, operation…)</label>
             <input className="form-input" value={filter.search} onChange={e => setFilter(f => ({...f, search: e.target.value}))} placeholder="Search audit trail…" />
           </div>
         </div>
@@ -146,7 +159,6 @@ export function AuditTab({ activePersona }) {
                   <th>Target</th>
                   <th>Block</th>
                   <th>Timestamp</th>
-                  <th>Tx Hash</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,19 +177,9 @@ export function AuditTab({ activePersona }) {
                         {e.actor_did?.slice(0, 18)}…
                       </span>
                     </td>
-                    <td className="text-xs text-muted">{e.target_id}</td>
+                    <td className="text-xs text-muted">{targetLabel(e)}</td>
                     <td><span className="mono" style={{ fontSize: '0.72rem' }}>#{e.block_number}</span></td>
                     <td className="text-xs text-muted">{new Date(e.timestamp * 1000).toLocaleString()}</td>
-                    <td>
-                      <button
-                        className="hash-badge"
-                        onClick={() => setVerifyTx(e.tx_hash)}
-                        title="Click to verify this transaction on-chain"
-                      >
-                        {e.tx_hash?.slice(0, 8)}…{e.tx_hash?.slice(-6)}
-                        <span style={{ fontSize: '0.6rem', opacity: 0.6 }}>⛓</span>
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>

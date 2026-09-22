@@ -100,7 +100,6 @@ router.post("/", async (req, res) => {
       message: "Identity successfully registered on-chain and in BEL directory",
       did,
       role,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed.toString(),
     });
@@ -139,7 +138,6 @@ router.put("/:did/role", async (req, res) => {
       message: `Role successfully updated to ${newRole}`,
       did,
       newRole,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
     });
   } catch (err) {

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import { HashBadge } from './VerifyModal';
 
 function sensitivityBadge(label) {
   const cls = label?.toLowerCase();
@@ -146,7 +145,7 @@ export function AccessControlTab({ activePersona, txAction }) {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Document File (for SHA-256 Anchoring)</label>
+                <label className="form-label">Protected Document</label>
                 <select className="form-select" value={form.documentFilename} onChange={e => setForm(f => ({...f, documentFilename: e.target.value}))}>
                   <option value="radar_bay_03_tech_spec.txt">Radar Bay 03 Tech Spec</option>
                   <option value="ew_lab_signal_protocol.txt">EW Lab Signal Protocol</option>
@@ -213,12 +212,10 @@ export function AccessControlTab({ activePersona, txAction }) {
                 </div>
               </div>
 
-              {/* Document hash */}
+              {/* Integrity anchors are held by the protected backend. */}
               <div className="flex gap-1 mb-2" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                <span className="text-xs text-muted">SHA-256 Anchor:</span>
-                <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--accent-cyan)' }}>
-                  {res.document_hash?.slice(0, 22)}…{res.document_hash?.slice(-8)}
-                </span>
+                <span className="text-xs text-muted">Document integrity anchor:</span>
+                <span className="text-xs" style={{ color: 'var(--accent-emerald)' }}>Protected in backend</span>
               </div>
 
               {/* Integrity result */}

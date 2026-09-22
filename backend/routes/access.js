@@ -77,7 +77,6 @@ router.post("/requests", async (req, res) => {
       message: "Access request successfully recorded on the blockchain ledger",
       did,
       resourceId,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
     });
   } catch (err) {
@@ -111,7 +110,6 @@ router.post("/grant", async (req, res) => {
       message: "Access grant confirmed on-chain. Permission active immediately.",
       did,
       resourceId,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
     });
   } catch (err) {
@@ -145,7 +143,6 @@ router.post("/revoke", async (req, res) => {
       message: "Access revocation confirmed on-chain. Permission terminated immediately.",
       did,
       resourceId,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
     });
   } catch (err) {

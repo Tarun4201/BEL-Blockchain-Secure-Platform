@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import { HashBadge } from './VerifyModal';
 
 function statusBadge(status) {
   const s = status?.toUpperCase();
@@ -81,7 +80,7 @@ export function AssetsTab({ activePersona, txAction }) {
                 <input className="form-input mono" value={mintForm.initialOwnerDid} onChange={e => setMintForm(f => ({...f, initialOwnerDid: e.target.value}))} placeholder="did:bel:0x..." required />
               </div>
               <div className="form-group">
-                <label className="form-label">Schematic Document (SHA-256 Anchoring)</label>
+                <label className="form-label">Protected Schematic</label>
                 <select className="form-select" value={mintForm.documentFilename} onChange={e => setMintForm(f => ({...f, documentFilename: e.target.value}))}>
                   <option value="radar_unit_ru204_schematic.txt">RU-204 Hardware Schematic</option>
                   <option value="radar_bay_03_tech_spec.txt">Radar Bay 03 Tech Spec</option>
@@ -157,7 +156,7 @@ export function AssetsTab({ activePersona, txAction }) {
 
           <div className="grid-2 mb-3" style={{ gap: '0.75rem' }}>
             {[
-              ['Document SHA-256 Hash', selectedAsset.document_hash || selectedAsset.documentHash],
+              ['Document integrity anchor', 'Protected in backend'],
               ['Current Owner DID', selectedAsset.current_owner_did || selectedAsset.currentOwnerDid],
               ['Status', selectedAsset.status],
               ['Minted At', selectedAsset.mintedAt ? new Date(selectedAsset.mintedAt * 1000).toLocaleString() : 'N/A'],

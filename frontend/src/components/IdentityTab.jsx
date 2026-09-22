@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import { HashBadge } from './VerifyModal';
 
 const ROLES = ['ADMIN', 'ENGINEER', 'TECHNICIAN', 'MANAGER'];
 

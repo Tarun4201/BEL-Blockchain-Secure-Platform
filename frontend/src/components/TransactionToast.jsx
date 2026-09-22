@@ -25,8 +25,7 @@ export function useToast() {
       updateToast(id, {
         type: 'confirmed',
         title: `✓ ${label}`,
-        body: result.txHash ? `Tx: ${result.txHash.slice(0, 20)}...` : 'Confirmed on-chain',
-        txHash: result.txHash,
+        body: 'Confirmed on-chain. Cryptographic identifiers are retained by the protected backend.',
       });
       setTimeout(() => removeToast(id), 7000);
       return result;
@@ -51,11 +50,6 @@ export function TransactionToast({ toasts, removeToast }) {
             {t.title}
           </div>
           <div className="toast-body">{t.body}</div>
-          {t.txHash && (
-            <div className="mono mt-1" style={{ fontSize: '0.65rem' }}>
-              {t.txHash}
-            </div>
-          )}
         </div>
       ))}
     </div>

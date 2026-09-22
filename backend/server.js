@@ -12,6 +12,7 @@ const resourcesRouter = require("./routes/resources");
 const accessRouter = require("./routes/access");
 const assetsRouter = require("./routes/assets");
 const auditRouter = require("./routes/audit");
+const erpRouter = require("./routes/erp");
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -34,6 +35,7 @@ app.use("/api/resources", resourcesRouter);
 app.use("/api/access", accessRouter);
 app.use("/api/assets", assetsRouter);
 app.use("/api/audit", auditRouter);
+app.use("/api/erp", erpRouter);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {

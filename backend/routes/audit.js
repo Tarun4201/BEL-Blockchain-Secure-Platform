@@ -49,10 +49,9 @@ router.get("/", async (req, res) => {
       } catch {
         parsedDetails = { raw: e.details };
       }
-      return {
-        ...e,
-        details: parsedDetails,
-      };
+      const { tx_hash, ...safeEvent } = e;
+      const { documentHash, document_hash, txHash, tx_hash: detailTxHash, ...safeDetails } = parsedDetails;
+      return { ...safeEvent, details: safeDetails };
     });
 
     const totalCount = await get("SELECT COUNT(*) as count FROM audit_index");
@@ -67,48 +66,13 @@ router.get("/", async (req, res) => {
 });
 
 /**
- * GET /api/audit/tx/:txHash
- * Direct on-chain verification endpoint querying raw blockchain node RPC
- * Used for "Verify on Chain" modal to demonstrate cryptographic proof
+ * Transaction identifiers and raw receipts are retained by backend services.
+ * They are intentionally not exposed to browser clients.
  */
-router.get("/tx/:txHash", async (req, res) => {
-  try {
-    const { txHash } = req.params;
-
-    const [tx, receipt] = await Promise.all([
-      provider.getTransaction(txHash),
-      provider.getTransactionReceipt(txHash),
-    ]);
-
-    if (!tx || !receipt) {
-      return res.status(404).json({ error: "Transaction not found on local blockchain" });
-    }
-
-    const block = await provider.getBlock(receipt.blockNumber);
-
-    res.json({
-      isVerifiedOnChain: true,
-      txHash: tx.hash,
-      from: tx.from,
-      to: tx.to,
-      nonce: tx.nonce,
-      blockNumber: receipt.blockNumber,
-      blockHash: receipt.blockHash,
-      timestamp: block ? Number(block.timestamp) : null,
-      gasUsed: receipt.gasUsed.toString(),
-      effectiveGasPrice: receipt.gasPrice ? receipt.gasPrice.toString() : "0",
-      status: receipt.status === 1 ? "SUCCESS (CONFIRMED)" : "REVERTED",
-      logsCount: receipt.logs.length,
-      rawLogs: receipt.logs.map((l) => ({
-        address: l.address,
-        topics: l.topics,
-        data: l.data,
-        index: l.index,
-      })),
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+router.get("/tx/:txHash", (_req, res) => {
+  res.status(403).json({
+    error: "Transaction identifiers and raw blockchain receipts are retained by the protected backend.",
+  });
 });
 
 /**

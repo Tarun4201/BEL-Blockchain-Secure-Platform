@@ -1,15 +1,12 @@
-import { useState, useEffect } from 'react';
-import { api } from '../api/client';
-
-export function Navbar({ personas, activePersona, onSwitchPersona, chainStatus }) {
+export function Navbar({ activePersona, chainStatus, onSignOut, currentPage }) {
   const isOnline = chainStatus?.isNodeConnected;
   return (
     <nav className="navbar">
       <div className="navbar-brand">
         <div className="navbar-logo">BEL</div>
         <div>
-          <div className="navbar-title">BEL Blockchain Security Platform</div>
-          <div className="navbar-subtitle">Bharat Electronics Limited — Defence Grade</div>
+          <div className="navbar-title">BEL Secure Operations</div>
+          <div className="navbar-subtitle">Bharat Electronics Limited <span>/</span> {currentPage}</div>
         </div>
       </div>
       <div className="navbar-right">
@@ -18,18 +15,9 @@ export function Navbar({ personas, activePersona, onSwitchPersona, chainStatus }
           <span>{isOnline ? `Block #${chainStatus.currentBlockNumber}` : 'Node Offline'}</span>
           <span style={{ color: 'var(--text-muted)' }}>· Hardhat Local</span>
         </div>
-        <div className="persona-switcher">
-          {personas.map(p => (
-            <button
-              key={p.id}
-              className={`persona-btn ${activePersona?.id === p.id ? 'active' : ''}`}
-              onClick={() => onSwitchPersona(p.id.toUpperCase())}
-              title={`${p.name} (${p.role})`}
-            >
-              {p.name === 'R. Sharma' ? '👤 R. Sharma' :
-               p.name === 'A. Verma' ? '🔧 A. Verma' : '🛡 Admin'}
-            </button>
-          ))}
+        <div className="signed-in-user">
+          <span>{activePersona?.name || 'Secure session'}</span>
+          <button className="sign-out-btn" onClick={onSignOut}>Sign out</button>
         </div>
       </div>
     </nav>

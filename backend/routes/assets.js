@@ -8,6 +8,8 @@ const { computeFileHash, verifyDocumentIntegrity } = require("../utils/hasher");
 
 const DOCS_DIR = path.join(__dirname, "..", "storage", "documents");
 
+const withoutHashFields = ({ document_hash, documentHash, ...asset }) => asset;
+
 /**
  * GET /api/assets
  * Returns list of defense assets with metadata and current owner
@@ -15,7 +17,7 @@ const DOCS_DIR = path.join(__dirname, "..", "storage", "documents");
 router.get("/", async (req, res) => {
   try {
     const assets = await all("SELECT * FROM assets_meta ORDER BY asset_id ASC");
-    res.json(assets);
+    res.json(assets.map(withoutHashFields));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -50,9 +52,8 @@ router.get("/:id", async (req, res) => {
       }));
 
       return res.json({
-        ...asset,
+        ...withoutHashFields(asset),
         currentOwnerDid: onChain[2],
-        documentHash: onChain[3],
         status: Number(onChain[4]) === 0 ? "ACTIVE" : "RETIRED",
         mintedBy: onChain[5],
         mintedAt: Number(onChain[6]),
@@ -60,7 +61,6 @@ router.get("/:id", async (req, res) => {
           tokenId: Number(onChain[0]),
           metadataURI: onChain[1],
           currentOwnerDid: onChain[2],
-          documentHash: onChain[3],
           status: Number(onChain[4]) === 0 ? "ACTIVE" : "RETIRED",
           mintedBy: onChain[5],
           mintedAt: Number(onChain[6]),
@@ -70,7 +70,7 @@ router.get("/:id", async (req, res) => {
       });
     } catch (chainErr) {
       return res.json({
-        ...asset,
+        ...withoutHashFields(asset),
         history: [],
         chainError: chainErr.message,
       });
@@ -145,8 +145,6 @@ router.post("/", async (req, res) => {
       assetId: mintedAssetId,
       title,
       currentOwnerDid: initialOwnerDid,
-      documentHash: docHash,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
     });
   } catch (err) {
@@ -188,7 +186,6 @@ router.post("/:id/transfer", async (req, res) => {
       message: `Custody of Asset #${assetId} successfully transferred to ${newOwnerDid}`,
       assetId,
       newOwnerDid,
-      txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
     });
   } catch (err) {
@@ -225,8 +222,6 @@ router.get("/:id/verify-integrity", async (req, res) => {
       assetId,
       title: meta.title,
       filename: meta.document_filename,
-      onChainHash: result.onChainHash,
-      computedOffChainHash: result.computedHash,
       integrityVerified: result.matches,
       tamperEvidentVerdict: result.matches
         ? "PASSED: Asset schematic and hardware specifications match blockchain anchor."

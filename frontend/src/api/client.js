@@ -51,6 +51,26 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return req('GET', `/audit${q ? '?' + q : ''}`);
   },
-  getTx: (txHash) => req('GET', `/audit/tx/${txHash}`),
   rebuildIndex: () => req('POST', '/audit/rebuild'),
+};
+
+async function erpReq(path, { method = 'GET', body, sessionToken } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (sessionToken) headers['x-erp-session'] = sessionToken;
+  const res = await fetch(`${BASE}/erp${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const data = res.status === 204 ? null : await res.json();
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data;
+}
+
+export const erpApi = {
+  bootstrap: () => erpReq('/bootstrap'),
+  login: (data) => erpReq('/login', { method: 'POST', body: data }),
+  logout: (sessionToken) => erpReq('/logout', { method: 'POST', sessionToken }),
+  dashboard: (sessionToken, departmentId) => erpReq(`/dashboard?departmentId=${encodeURIComponent(departmentId || '')}`, { sessionToken }),
+  records: (sessionToken, module, departmentId) => erpReq(`/records/${encodeURIComponent(module)}?departmentId=${encodeURIComponent(departmentId || '')}`, { sessionToken }),
+  accessRequests: (sessionToken) => erpReq('/access-requests', { sessionToken }),
+  createAccessRequest: (sessionToken, data) => erpReq('/access-requests', { method: 'POST', body: data, sessionToken }),
+  decideAccessRequest: (sessionToken, requestId, decision) => erpReq(`/access-requests/${encodeURIComponent(requestId)}/${decision}`, { method: 'POST', sessionToken }),
+  audit: (sessionToken) => erpReq('/audit', { sessionToken }),
 };
