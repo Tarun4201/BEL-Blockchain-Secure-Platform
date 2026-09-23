@@ -2,10 +2,10 @@
   "network": "localhost",
   "chainId": 31337,
   "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  "deployedAt": "2026-09-22T05:29:54.781Z",
+  "deployedAt": "2026-09-23T08:53:18.437Z",
   "contracts": {
     "IdentityRegistry": {
-      "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "address": "0x59b670e9fA9D0A427751Af201D676719a970857b",
       "abi": [
         {
           "inputs": [],
@@ -292,10 +292,16 @@
       ]
     },
     "AccessControlManager": {
-      "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      "address": "0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1",
       "abi": [
         {
-          "inputs": [],
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "identityRegistryAddress",
+              "type": "address"
+            }
+          ],
           "stateMutability": "nonpayable",
           "type": "constructor"
         },
@@ -427,6 +433,43 @@
             }
           ],
           "name": "ResourceCreated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "string",
+              "name": "resourceId",
+              "type": "string"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "role",
+              "type": "string"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "allowed",
+              "type": "bool"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "updatedBy",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            }
+          ],
+          "name": "RolePermissionUpdated",
           "type": "event"
         },
         {
@@ -585,6 +628,46 @@
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "getPendingRequests",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "string",
+                  "name": "did",
+                  "type": "string"
+                },
+                {
+                  "internalType": "string",
+                  "name": "resourceId",
+                  "type": "string"
+                },
+                {
+                  "internalType": "enum AccessControlManager.AccessStatus",
+                  "name": "status",
+                  "type": "uint8"
+                },
+                {
+                  "internalType": "address",
+                  "name": "updatedBy",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "updatedAt",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct AccessControlManager.AccessRecord[]",
+              "name": "",
+              "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "string",
@@ -682,6 +765,43 @@
           "inputs": [
             {
               "internalType": "string",
+              "name": "resourceId",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "role",
+              "type": "string"
+            }
+          ],
+          "name": "hasRolePermission",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "identityRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IIdentityRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "string",
               "name": "did",
               "type": "string"
             },
@@ -713,14 +833,43 @@
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "string",
+              "name": "resourceId",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "role",
+              "type": "string"
+            },
+            {
+              "internalType": "bool",
+              "name": "allowed",
+              "type": "bool"
+            }
+          ],
+          "name": "setRolePermission",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
         }
       ]
     },
     "AssetRegistry": {
-      "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+      "address": "0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44",
       "abi": [
         {
-          "inputs": [],
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "identityRegistryAddress",
+              "type": "address"
+            }
+          ],
           "stateMutability": "nonpayable",
           "type": "constructor"
         },
@@ -1111,6 +1260,11 @@
                   "type": "string"
                 },
                 {
+                  "internalType": "address",
+                  "name": "currentOwnerWallet",
+                  "type": "address"
+                },
+                {
                   "internalType": "string",
                   "name": "documentHash",
                   "type": "string"
@@ -1261,6 +1415,19 @@
               "internalType": "struct AssetRegistry.OwnershipRecord[]",
               "name": "",
               "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "identityRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IIdentityRegistry",
+              "name": "",
+              "type": "address"
             }
           ],
           "stateMutability": "view",

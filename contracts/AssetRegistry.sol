@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "./IIdentityRegistry.sol";
 
 /**
  * @title AssetRegistry
@@ -10,6 +11,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
  */
 contract AssetRegistry is ERC721URIStorage {
     address public admin;
+    IIdentityRegistry public immutable identityRegistry;
     uint256 private _nextTokenId = 1;
 
     enum AssetStatus {
@@ -29,6 +31,7 @@ contract AssetRegistry is ERC721URIStorage {
         uint256 assetId;
         string metadataURI;
         string currentOwnerDid;
+        address currentOwnerWallet;
         string documentHash; // SHA-256 hash of specs/manual
         AssetStatus status;
         address mintedBy;
@@ -70,8 +73,10 @@ contract AssetRegistry is ERC721URIStorage {
         _;
     }
 
-    constructor() ERC721("BEL Defense Asset", "BELD") {
+    constructor(address identityRegistryAddress) ERC721("BEL Defense Asset", "BELD") {
+        require(identityRegistryAddress != address(0), "AssetRegistry: zero identity registry");
         admin = msg.sender;
+        identityRegistry = IIdentityRegistry(identityRegistryAddress);
     }
 
     /**
@@ -83,15 +88,18 @@ contract AssetRegistry is ERC721URIStorage {
         string calldata documentHash
     ) external onlyAdmin returns (uint256) {
         require(bytes(initialOwnerDid).length > 0, "AssetRegistry: empty initial owner DID");
+        require(identityRegistry.isRegistered(initialOwnerDid), "AssetRegistry: owner DID is not registered");
+        (, address initialOwnerWallet, , , ) = identityRegistry.getIdentity(initialOwnerDid);
 
         uint256 assetId = _nextTokenId++;
-        _safeMint(msg.sender, assetId);
+        _safeMint(initialOwnerWallet, assetId);
         _setTokenURI(assetId, metadataURI);
 
         _assetInfos[assetId] = AssetInfo({
             assetId: assetId,
             metadataURI: metadataURI,
             currentOwnerDid: initialOwnerDid,
+            currentOwnerWallet: initialOwnerWallet,
             documentHash: documentHash,
             status: AssetStatus.ACTIVE,
             mintedBy: msg.sender,
@@ -121,9 +129,14 @@ contract AssetRegistry is ERC721URIStorage {
         require(_assetInfos[assetId].mintedAt > 0, "AssetRegistry: asset does not exist");
         require(_assetInfos[assetId].status == AssetStatus.ACTIVE, "AssetRegistry: asset is retired");
         require(bytes(newOwnerDid).length > 0, "AssetRegistry: empty new owner DID");
+        require(identityRegistry.isRegistered(newOwnerDid), "AssetRegistry: owner DID is not registered");
 
         string memory fromDid = _assetInfos[assetId].currentOwnerDid;
+        (, address newOwnerWallet, , , ) = identityRegistry.getIdentity(newOwnerDid);
+        address previousOwnerWallet = ownerOf(assetId);
+        _transfer(previousOwnerWallet, newOwnerWallet, assetId);
         _assetInfos[assetId].currentOwnerDid = newOwnerDid;
+        _assetInfos[assetId].currentOwnerWallet = newOwnerWallet;
 
         _ownershipHistories[assetId].push(OwnershipRecord({
             assetId: assetId,

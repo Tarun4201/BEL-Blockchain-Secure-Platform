@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "./IIdentityRegistry.sol";
+
 /**
  * @title AccessControlManager
  * @notice Manages protected resources, access requests, grants, revocations, and canonical access verification.
@@ -8,6 +10,7 @@ pragma solidity ^0.8.24;
  */
 contract AccessControlManager {
     address public admin;
+    IIdentityRegistry public immutable identityRegistry;
 
     enum AccessStatus {
         NONE,
@@ -40,6 +43,10 @@ contract AccessControlManager {
     // Mapping from keccak256(abi.encodePacked(did, resourceId)) to AccessRecord
     mapping(bytes32 => AccessRecord) private _accessRecords;
     bytes32[] private _allAccessKeys;
+    // Role policy supplements explicit grants. An administrator can allow a
+    // registered role to access a resource; identity role changes take effect
+    // immediately because hasAccess resolves the DID's live registry role.
+    mapping(string => mapping(string => bool)) private _rolePermissions;
 
     event ResourceCreated(
         string indexed resourceId,
@@ -70,13 +77,23 @@ contract AccessControlManager {
         uint256 timestamp
     );
 
+    event RolePermissionUpdated(
+        string indexed resourceId,
+        string role,
+        bool allowed,
+        address indexed updatedBy,
+        uint256 timestamp
+    );
+
     modifier onlyAdmin() {
         require(msg.sender == admin, "AccessControlManager: caller is not admin");
         _;
     }
 
-    constructor() {
+    constructor(address identityRegistryAddress) {
+        require(identityRegistryAddress != address(0), "AccessControlManager: zero identity registry");
         admin = msg.sender;
+        identityRegistry = IIdentityRegistry(identityRegistryAddress);
     }
 
     function _getKey(string memory did, string memory resourceId) internal pure returns (bytes32) {
@@ -114,6 +131,9 @@ contract AccessControlManager {
     function requestAccess(string calldata did, string calldata resourceId) external {
         require(bytes(did).length > 0, "AccessControlManager: empty DID");
         require(_resources[resourceId].exists, "AccessControlManager: resource does not exist");
+        require(identityRegistry.isRegistered(did), "AccessControlManager: DID is not registered");
+        (, address didWallet, , , ) = identityRegistry.getIdentity(did);
+        require(msg.sender == didWallet, "AccessControlManager: caller does not control DID");
 
         bytes32 key = _getKey(did, resourceId);
         AccessRecord storage record = _accessRecords[key];
@@ -140,6 +160,7 @@ contract AccessControlManager {
     function grantAccess(string calldata did, string calldata resourceId) external onlyAdmin {
         require(bytes(did).length > 0, "AccessControlManager: empty DID");
         require(_resources[resourceId].exists, "AccessControlManager: resource does not exist");
+        require(identityRegistry.isRegistered(did), "AccessControlManager: DID is not registered");
 
         bytes32 key = _getKey(did, resourceId);
         AccessRecord storage record = _accessRecords[key];
@@ -176,12 +197,34 @@ contract AccessControlManager {
     }
 
     /**
+     * @notice Set the policy for all registered identities with a given role.
+     * Explicit grants remain available for temporary or exceptional access.
+     */
+    function setRolePermission(
+        string calldata resourceId,
+        string calldata role,
+        bool allowed
+    ) external onlyAdmin {
+        require(_resources[resourceId].exists, "AccessControlManager: resource does not exist");
+        require(bytes(role).length > 0, "AccessControlManager: empty role");
+        _rolePermissions[resourceId][role] = allowed;
+        emit RolePermissionUpdated(resourceId, role, allowed, msg.sender, block.timestamp);
+    }
+
+    function hasRolePermission(string calldata resourceId, string calldata role) external view returns (bool) {
+        return _rolePermissions[resourceId][role];
+    }
+
+    /**
      * @notice Canonical access check function.
      * Evaluates strictly whether access is explicitly granted.
      */
     function hasAccess(string calldata did, string calldata resourceId) external view returns (bool) {
         bytes32 key = _getKey(did, resourceId);
-        return _accessRecords[key].status == AccessStatus.GRANTED;
+        if (_accessRecords[key].status == AccessStatus.GRANTED) return true;
+        if (!_resources[resourceId].exists || !identityRegistry.isRegistered(did)) return false;
+        (, , string memory role, , ) = identityRegistry.getIdentity(did);
+        return _rolePermissions[resourceId][role];
     }
 
     /**
@@ -247,5 +290,23 @@ contract AccessControlManager {
             list[i] = _accessRecords[_allAccessKeys[i]];
         }
         return list;
+    }
+
+    /**
+     * @notice Return only requests waiting for an administrator decision.
+     * This powers the approval queue without trusting an off-chain filter.
+     */
+    function getPendingRequests() external view returns (AccessRecord[] memory) {
+        uint256 count;
+        for (uint256 i = 0; i < _allAccessKeys.length; i++) {
+            if (_accessRecords[_allAccessKeys[i]].status == AccessStatus.REQUESTED) count++;
+        }
+        AccessRecord[] memory pending = new AccessRecord[](count);
+        uint256 index;
+        for (uint256 i = 0; i < _allAccessKeys.length; i++) {
+            AccessRecord memory record = _accessRecords[_allAccessKeys[i]];
+            if (record.status == AccessStatus.REQUESTED) pending[index++] = record;
+        }
+        return pending;
     }
 }

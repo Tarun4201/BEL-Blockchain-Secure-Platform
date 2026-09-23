@@ -19,14 +19,14 @@ async function main() {
 
   // 2. Deploy AccessControlManager
   const AccessControlManager = await hre.ethers.getContractFactory("AccessControlManager");
-  const accessControl = await AccessControlManager.deploy();
+  const accessControl = await AccessControlManager.deploy(identityAddress);
   await accessControl.waitForDeployment();
   const accessControlAddress = await accessControl.getAddress();
   console.log("✓ AccessControlManager deployed to:", accessControlAddress);
 
   // 3. Deploy AssetRegistry (ERC-721)
   const AssetRegistry = await hre.ethers.getContractFactory("AssetRegistry");
-  const assetRegistry = await AssetRegistry.deploy();
+  const assetRegistry = await AssetRegistry.deploy(identityAddress);
   await assetRegistry.waitForDeployment();
   const assetRegistryAddress = await assetRegistry.getAddress();
   console.log("✓ AssetRegistry (ERC-721) deployed to:", assetRegistryAddress);

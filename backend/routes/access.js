@@ -41,8 +41,8 @@ router.get("/requests", async (req, res) => {
     const requests = rawRequests.map((r) => ({
       did: r.did,
       resourceId: r.resourceId,
-      requestedBy: r.requestedBy,
-      requestedAt: Number(r.requestedAt),
+      requestedBy: r.updatedBy,
+      requestedAt: Number(r.updatedAt),
     }));
 
     res.json(requests);
@@ -63,7 +63,9 @@ router.post("/requests", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields: did, resourceId" });
     }
 
-    // Resolve user's signer based on DID
+    // Resolve the local demonstration signer; unknown DIDs are never allowed to
+    // fall back to the admin signer. The contract also verifies this wallet owns
+    // the DID before it records the request.
     const userSigner = resolveSigner(did);
     const contract = getContract("AccessControlManager", userSigner);
 
@@ -148,6 +150,37 @@ router.post("/revoke", async (req, res) => {
   } catch (err) {
     console.error("Access revocation error:", err);
     res.status(400).json({ error: err.reason || err.message });
+  }
+});
+
+/**
+ * POST /api/access/role-permissions
+ * Admin defines the on-chain RBAC policy for a protected resource.
+ */
+router.post("/role-permissions", async (req, res) => {
+  try {
+    const { resourceId, role, allowed } = req.body;
+    if (!resourceId || !role || typeof allowed !== "boolean") {
+      return res.status(400).json({ error: "resourceId, role, and boolean allowed are required" });
+    }
+    const signer = personas.ADMIN.signer;
+    const contract = getContract("AccessControlManager", signer);
+    const nonce = await getLatestNonce(signer.address);
+    const tx = await contract.setRolePermission(resourceId, role, allowed, { nonce });
+    const receipt = await tx.wait();
+    res.json({ status: "confirmed", resourceId, role, allowed, blockNumber: receipt.blockNumber });
+  } catch (err) {
+    res.status(400).json({ error: err.reason || err.message });
+  }
+});
+
+router.get("/role-permissions/:resourceId/:role", async (req, res) => {
+  try {
+    const contract = getContract("AccessControlManager");
+    const allowed = await contract.hasRolePermission(req.params.resourceId, req.params.role);
+    res.json({ resourceId: req.params.resourceId, role: req.params.role, allowed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

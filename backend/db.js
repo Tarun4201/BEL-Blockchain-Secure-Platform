@@ -154,6 +154,19 @@ async function initDb() {
       created_at INTEGER NOT NULL
     )
   `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS erp_guide_progress (
+      employee_id TEXT NOT NULL,
+      tour_version TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'NOT_STARTED',
+      current_step INTEGER NOT NULL DEFAULT 0,
+      last_viewed_step INTEGER NOT NULL DEFAULT 0,
+      started_at INTEGER,
+      completed_at INTEGER,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (employee_id, tour_version)
+    )
+  `);
 
   await seedErpDemo();
 
@@ -175,6 +188,7 @@ async function resetDb() {
   await run("DROP TABLE IF EXISTS erp_access_requests");
   await run("DROP TABLE IF EXISTS erp_records");
   await run("DROP TABLE IF EXISTS erp_audit_logs");
+  await run("DROP TABLE IF EXISTS erp_guide_progress");
   await initDb();
   console.log("✓ Database reset cleanly.");
 }

@@ -115,8 +115,9 @@ function resolveSigner(personaIdOrDid) {
     }
   }
 
-  // Fallback to Admin signer if not found
-  return personas.ADMIN.signer;
+  // Never sign for an unknown DID. Falling back to the admin wallet would let an
+  // unrecognised identifier create a request under administrator credentials.
+  throw new Error("No local signer is configured for this DID");
 }
 
 /**

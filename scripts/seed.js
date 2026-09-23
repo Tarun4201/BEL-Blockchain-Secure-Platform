@@ -16,7 +16,7 @@ async function seed() {
   console.log("--> Resetting SQLite database tables...");
   await resetDb();
 
-  const [adminSigner] = await hre.ethers.getSigners();
+  const [adminSigner, sharmaSigner, vermaSigner] = await hre.ethers.getSigners();
   console.log("Admin Signer Address:", adminSigner.address);
 
   // Load contract config
@@ -70,6 +70,26 @@ async function seed() {
     ]
   );
   console.log("✓ Admin profile recorded in BEL directory.");
+
+  // Register the two operational demo identities. These are real on-chain DID
+  // anchors, so access requests and NFT transfers can be signed by the wallet
+  // bound to each DID instead of by an administrator fallback wallet.
+  const demoPersonnel = [
+    ["R. Sharma", "Radar & Phased Array Systems", "Senior Systems Engineer", "r.sharma@bel.co.in", "ENGINEER", sharmaSigner],
+    ["A. Verma", "Electronics Fabrication & Maintenance", "Lead Hardware Specialist", "a.verma@bel.co.in", "TECHNICIAN", vermaSigner],
+  ];
+  for (const [fullName, department, designation, email, role, signer] of demoPersonnel) {
+    const did = `did:bel:${signer.address.toLowerCase()}`;
+    if (!(await identityContract.isRegistered(did))) {
+      await (await identityContract.registerIdentity(signer.address, did, role)).wait();
+      console.log(`✓ ${fullName} identity registered on-chain.`);
+    }
+    await run(
+      `INSERT OR REPLACE INTO users (did, full_name, department, designation, email, role, wallet_address)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [did, fullName, department, designation, email, role, signer.address.toLowerCase()]
+    );
+  }
 
   // 3. Compute Hashes and Define Protected Resources
   const resourcesToSeed = [

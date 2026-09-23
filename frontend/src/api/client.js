@@ -37,6 +37,8 @@ export const api = {
   requestAccess: (did, resourceId) => req('POST', '/access/requests', { did, resourceId }),
   grantAccess: (did, resourceId) => req('POST', '/access/grant', { did, resourceId }),
   revokeAccess: (did, resourceId) => req('POST', '/access/revoke', { did, resourceId }),
+  setRolePermission: (resourceId, role, allowed) => req('POST', '/access/role-permissions', { resourceId, role, allowed }),
+  getRolePermission: (resourceId, role) => req('GET', `/access/role-permissions/${encodeURIComponent(resourceId)}/${encodeURIComponent(role)}`),
   checkAccess: (did, resourceId) => req('GET', `/access/check/${encodeURIComponent(did)}/${resourceId}`),
 
   // Assets
@@ -73,4 +75,8 @@ export const erpApi = {
   createAccessRequest: (sessionToken, data) => erpReq('/access-requests', { method: 'POST', body: data, sessionToken }),
   decideAccessRequest: (sessionToken, requestId, decision) => erpReq(`/access-requests/${encodeURIComponent(requestId)}/${decision}`, { method: 'POST', sessionToken }),
   audit: (sessionToken) => erpReq('/audit', { sessionToken }),
+  blockchainOverview: (sessionToken) => erpReq('/blockchain/overview', { sessionToken }),
+  guideProgress: (sessionToken) => erpReq('/guide/progress', { sessionToken }),
+  saveGuideProgress: (sessionToken, data) => erpReq('/guide/progress', { method: 'PUT', body: data, sessionToken }),
+  guideStats: (sessionToken) => erpReq('/guide/stats', { sessionToken }),
 };

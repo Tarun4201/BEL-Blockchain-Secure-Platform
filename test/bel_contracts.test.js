@@ -14,10 +14,10 @@ describe("BEL Blockchain Platform Contracts", function () {
     identityRegistry = await IdentityRegistry.deploy();
 
     const AccessControlManager = await ethers.getContractFactory("AccessControlManager");
-    accessControl = await AccessControlManager.deploy();
+    accessControl = await AccessControlManager.deploy(await identityRegistry.getAddress());
 
     const AssetRegistry = await ethers.getContractFactory("AssetRegistry");
-    assetRegistry = await AssetRegistry.deploy();
+    assetRegistry = await AssetRegistry.deploy(await identityRegistry.getAddress());
   });
 
   describe("IdentityRegistry", function () {
@@ -62,6 +62,7 @@ describe("BEL Blockchain Platform Contracts", function () {
     const did = "did:bel:0x111";
 
     beforeEach(async function () {
+      await identityRegistry.registerIdentity(user1.address, did, "ENGINEER");
       await accessControl.createResource(resId, sensitivity, docHash);
     });
 
@@ -91,8 +92,13 @@ describe("BEL Blockchain Platform Contracts", function () {
       expect(await accessControl.hasAccess(did, resId)).to.be.false;
     });
 
-    it("should enforce role separation: role does not bypass access check", async function () {
-      // Even if user is registered as an ENGINEER, hasAccess returns false until granted
+    it("should enforce administrator-defined RBAC policies for registered identities", async function () {
+      expect(await accessControl.hasAccess(did, resId)).to.be.false;
+      await accessControl.setRolePermission(resId, "ENGINEER", true);
+      expect(await accessControl.hasAccess(did, resId)).to.be.true;
+
+      // A role change updates effective permission without an off-chain cache.
+      await identityRegistry.assignRole(did, "TECHNICIAN");
       expect(await accessControl.hasAccess(did, resId)).to.be.false;
     });
   });
@@ -104,6 +110,7 @@ describe("BEL Blockchain Platform Contracts", function () {
     const docHash = "0x4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a";
 
     it("should mint asset, emit AssetMinted, and store document hash", async function () {
+      await identityRegistry.registerIdentity(admin.address, initialOwnerDid, "ADMIN");
       const tx = await assetRegistry.mintAsset(metadataURI, initialOwnerDid, docHash);
       await tx.wait();
 
@@ -113,9 +120,12 @@ describe("BEL Blockchain Platform Contracts", function () {
       expect(asset[2]).to.equal(initialOwnerDid);
       expect(asset[3]).to.equal(docHash);
       expect(asset[4]).to.equal(0n); // ACTIVE
+      expect(await assetRegistry.ownerOf(1)).to.equal(admin.address);
     });
 
     it("should transfer asset and record chronological ownership history", async function () {
+      await identityRegistry.registerIdentity(admin.address, initialOwnerDid, "ADMIN");
+      await identityRegistry.registerIdentity(user1.address, newOwnerDid, "ENGINEER");
       await assetRegistry.mintAsset(metadataURI, initialOwnerDid, docHash);
       await assetRegistry.transferAsset(1, newOwnerDid);
 
@@ -127,9 +137,11 @@ describe("BEL Blockchain Platform Contracts", function () {
       expect(history[0].toDid).to.equal(initialOwnerDid);
       expect(history[1].fromDid).to.equal(initialOwnerDid);
       expect(history[1].toDid).to.equal(newOwnerDid);
+      expect(await assetRegistry.ownerOf(1)).to.equal(user1.address);
     });
 
     it("should allow retiring an asset", async function () {
+      await identityRegistry.registerIdentity(admin.address, initialOwnerDid, "ADMIN");
       await assetRegistry.mintAsset(metadataURI, initialOwnerDid, docHash);
       await assetRegistry.retireAsset(1);
 

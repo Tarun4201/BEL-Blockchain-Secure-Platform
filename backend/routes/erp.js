@@ -1,13 +1,14 @@
 const express = require("express");
 const crypto = require("crypto");
 const { all, get, run } = require("../db");
+const { getContract, provider } = require("../blockchain");
 
 const router = express.Router();
 const sessions = new Map();
 const SESSION_TTL_SECONDS = 30 * 60;
 
 const MODULES_BY_ROLE = {
-  ERP_ADMIN: ["dashboard", "procurement", "finance", "inventory", "production", "quality", "engineering", "logistics", "access-control", "organization", "users", "audit", "reports", "profile"],
+  ERP_ADMIN: ["dashboard", "procurement", "finance", "inventory", "production", "quality", "engineering", "logistics", "access-control", "organization", "users", "audit", "reports", "blockchain", "profile"],
   PROCUREMENT_OFFICER: ["dashboard", "procurement", "vendors", "access-control", "notifications", "profile"],
   FINANCE_OFFICER: ["dashboard", "finance", "access-control", "reports", "profile"],
   PRODUCTION_MANAGER: ["dashboard", "production", "inventory", "quality", "profile"],
@@ -25,7 +26,7 @@ const MODULE_LABELS = {
   dashboard: "Dashboard", procurement: "Procurement", vendors: "Vendor Management", finance: "Finance", inventory: "Inventory / Materials",
   production: "Production", quality: "Quality", engineering: "R&D / Engineering", projects: "Project Management", hr: "Human Resources",
   logistics: "Logistics", compliance: "Compliance", audit: "Audit", reports: "Reports", "access-control": "Access Control",
-  organization: "Organization Masters", users: "Users & Permissions", notifications: "Notifications", profile: "My Profile",
+  organization: "Organization Masters", users: "Users & Permissions", notifications: "Notifications", blockchain: "Blockchain Registry", profile: "My Profile",
   "vendor-records": "My Orders", "customer-records": "My Deliveries",
 };
 
@@ -156,6 +157,30 @@ router.get("/dashboard", requireSession, async (req, res) => {
   res.json({ workspace, modules: workspace.modules.map((id) => ({ id, label: MODULE_LABELS[id] || id })), counts: records, recentActivity: recent });
 });
 
+/**
+ * Admin-only, user-safe projection of the three canonical smart-contract
+ * registries. Hash values stay on the backend; this page is for demonstrating
+ * verified identities, ERC-721 custody, protected resources, and audit state.
+ */
+router.get("/blockchain/overview", requireSession, async (req, res) => {
+  if (req.erpUser.role_key !== "ERP_ADMIN") return res.status(403).json({ error: "Administrator permission required." });
+  try {
+    const [identityContract, accessContract, assetContract, blockNumber] = await Promise.all([
+      getContract("IdentityRegistry"), getContract("AccessControlManager"), getContract("AssetRegistry"), provider.getBlockNumber(),
+    ]);
+    const [identities, resources, assets, records] = await Promise.all([
+      identityContract.getAllIdentities(), accessContract.getAllResources(), assetContract.getAllAssets(), accessContract.getAllAccessRecords(),
+    ]);
+    res.json({
+      blockNumber,
+      identities: identities.map((item) => ({ did: item.did, wallet: item.userAddress, role: item.role, registeredAt: Number(item.registeredAt) })),
+      resources: resources.map((item) => ({ resourceId: item.resourceId, sensitivityLabel: item.sensitivityLabel, createdAt: Number(item.createdAt) })),
+      assets: assets.map((item) => ({ assetId: Number(item.assetId), metadataURI: item.metadataURI, currentOwnerDid: item.currentOwnerDid, tokenOwnerWallet: item.currentOwnerWallet, status: Number(item.status) === 0 ? "ACTIVE" : "RETIRED", mintedAt: Number(item.mintedAt) })),
+      accessRecords: records.map((item) => ({ did: item.did, resourceId: item.resourceId, status: ["NONE", "REQUESTED", "GRANTED", "REVOKED"][Number(item.status)] || "UNKNOWN", updatedAt: Number(item.updatedAt) })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get("/records/:module", requireSession, async (req, res) => {
   const workspaces = await workspacesFor(req.erpUser);
   const workspace = activeWorkspace(workspaces, req.query.departmentId);
@@ -202,6 +227,52 @@ router.post("/access-requests/:requestId/:decision", requireSession, async (req,
   await run("UPDATE erp_access_requests SET status = ?, approved_by = ?, updated_at = ? WHERE request_id = ?", [status, req.erpUser.employee_id, now(), request.request_id]);
   await logEvent({ employeeId: req.erpUser.employee_id, action: `INTERDEPARTMENT_ACCESS_${status}`, unitId: request.target_unit_id, departmentId: request.target_department_id, sbuId: request.target_sbu_id, targetId: request.request_id, result: "SUCCESS", reason: "Administrator decision", visibility: "AUDIT_ONLY" });
   res.json({ requestId: request.request_id, status });
+});
+
+const GUIDE_VERSION = "1.0";
+
+function guideProgressResponse(row) {
+  return {
+    tourVersion: GUIDE_VERSION,
+    status: row?.status || "NOT_STARTED",
+    currentStep: row?.current_step || 0,
+    lastViewedStep: row?.last_viewed_step || 0,
+    startedAt: row?.started_at || null,
+    completedAt: row?.completed_at || null,
+  };
+}
+
+router.get("/guide/progress", requireSession, async (req, res) => {
+  const progress = await get("SELECT * FROM erp_guide_progress WHERE employee_id = ? AND tour_version = ?", [req.erpUser.employee_id, GUIDE_VERSION]);
+  res.json(guideProgressResponse(progress));
+});
+
+router.put("/guide/progress", requireSession, async (req, res) => {
+  const requestedStatus = req.body?.status;
+  const status = ["IN_PROGRESS", "COMPLETED"].includes(requestedStatus) ? requestedStatus : null;
+  const currentStep = Math.max(0, Math.min(100, Number(req.body?.currentStep) || 0));
+  const lastViewedStep = Math.max(0, Math.min(100, Number(req.body?.lastViewedStep) || 0));
+  if (!status) return res.status(400).json({ error: "Use an allowed onboarding status." });
+  const timestamp = now();
+  await run(`INSERT INTO erp_guide_progress
+    (employee_id, tour_version, status, current_step, last_viewed_step, started_at, completed_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(employee_id, tour_version) DO UPDATE SET
+      status = excluded.status, current_step = excluded.current_step, last_viewed_step = excluded.last_viewed_step,
+      started_at = COALESCE(erp_guide_progress.started_at, excluded.started_at),
+      completed_at = CASE WHEN excluded.status = 'COMPLETED' THEN excluded.completed_at ELSE erp_guide_progress.completed_at END,
+      updated_at = excluded.updated_at`,
+  [req.erpUser.employee_id, GUIDE_VERSION, status, currentStep, lastViewedStep, timestamp, status === "COMPLETED" ? timestamp : null, timestamp]);
+  const progress = await get("SELECT * FROM erp_guide_progress WHERE employee_id = ? AND tour_version = ?", [req.erpUser.employee_id, GUIDE_VERSION]);
+  res.json(guideProgressResponse(progress));
+});
+
+router.get("/guide/stats", requireSession, async (req, res) => {
+  if (req.erpUser.role_key !== "ERP_ADMIN") return res.status(403).json({ error: "Administrator permission required." });
+  const rows = await all("SELECT status, COUNT(*) AS count FROM erp_guide_progress WHERE tour_version = ? GROUP BY status", [GUIDE_VERSION]);
+  const counts = Object.fromEntries(rows.map((row) => [row.status, Number(row.count)]));
+  const users = await get("SELECT COUNT(*) AS count FROM erp_users WHERE account_type = 'EMPLOYEE' AND employment_status = 'ACTIVE'");
+  res.json({ tourVersion: GUIDE_VERSION, completed: counts.COMPLETED || 0, inProgress: counts.IN_PROGRESS || 0, notStarted: Math.max(0, Number(users?.count || 0) - (counts.COMPLETED || 0) - (counts.IN_PROGRESS || 0)) });
 });
 
 router.get("/audit", requireSession, async (req, res) => {
