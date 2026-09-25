@@ -7,7 +7,7 @@ async function main() {
   console.log("Deploying BEL Blockchain Platform Contracts");
   console.log("==========================================");
 
-  const [deployer] = await hre.ethers.getSigners();
+  const [deployer, securityApprover] = await hre.ethers.getSigners();
   console.log("Deploying with account:", deployer.address);
 
   // 1. Deploy IdentityRegistry
@@ -26,7 +26,7 @@ async function main() {
 
   // 3. Deploy AssetRegistry (ERC-721)
   const AssetRegistry = await hre.ethers.getContractFactory("AssetRegistry");
-  const assetRegistry = await AssetRegistry.deploy(identityAddress);
+  const assetRegistry = await AssetRegistry.deploy(identityAddress, securityApprover.address);
   await assetRegistry.waitForDeployment();
   const assetRegistryAddress = await assetRegistry.getAddress();
   console.log("✓ AssetRegistry (ERC-721) deployed to:", assetRegistryAddress);

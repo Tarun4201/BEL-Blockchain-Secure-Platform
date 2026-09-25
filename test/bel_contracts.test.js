@@ -17,7 +17,7 @@ describe("BEL Blockchain Platform Contracts", function () {
     accessControl = await AccessControlManager.deploy(await identityRegistry.getAddress());
 
     const AssetRegistry = await ethers.getContractFactory("AssetRegistry");
-    assetRegistry = await AssetRegistry.deploy(await identityRegistry.getAddress());
+    assetRegistry = await AssetRegistry.deploy(await identityRegistry.getAddress(), user2.address);
   });
 
   describe("IdentityRegistry", function () {
@@ -138,6 +138,24 @@ describe("BEL Blockchain Platform Contracts", function () {
       expect(history[1].fromDid).to.equal(initialOwnerDid);
       expect(history[1].toDid).to.equal(newOwnerDid);
       expect(await assetRegistry.ownerOf(1)).to.equal(user1.address);
+    });
+
+    it("should require an independent security approver for a high-assurance transfer", async function () {
+      await identityRegistry.registerIdentity(admin.address, initialOwnerDid, "ADMIN");
+      await identityRegistry.registerIdentity(user1.address, newOwnerDid, "ENGINEER");
+      await assetRegistry.mintAsset(metadataURI, initialOwnerDid, docHash);
+      await assetRegistry.proposeHighAssuranceTransfer(1, newOwnerDid);
+      expect((await assetRegistry.getPendingTransfer(1)).active).to.equal(true);
+      await expect(assetRegistry.approveHighAssuranceTransfer(1)).to.be.revertedWith("AssetRegistry: caller is not security approver");
+      await assetRegistry.connect(user2).approveHighAssuranceTransfer(1);
+      expect((await assetRegistry.getAsset(1)).currentOwnerDid).to.equal(newOwnerDid);
+    });
+
+    it("should record a non-sensitive service lifecycle event", async function () {
+      await identityRegistry.registerIdentity(admin.address, initialOwnerDid, "ADMIN");
+      await assetRegistry.mintAsset(metadataURI, initialOwnerDid, docHash);
+      await assetRegistry.recordService(1, "SRV-2026-0042");
+      expect((await assetRegistry.getServiceHistory(1))[0].serviceReference).to.equal("SRV-2026-0042");
     });
 
     it("should allow retiring an asset", async function () {

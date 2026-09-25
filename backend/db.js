@@ -134,10 +134,22 @@ async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT UNIQUE NOT NULL, employee_id TEXT NOT NULL,
       target_unit_id TEXT NOT NULL, target_department_id TEXT NOT NULL, target_sbu_id TEXT NOT NULL,
       requested_module TEXT NOT NULL, requested_permission TEXT NOT NULL, business_reason TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'NORMAL', access_mode TEXT NOT NULL DEFAULT 'STANDARD', approval_note TEXT,
       start_date INTEGER NOT NULL, end_date INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING',
       approved_by TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
     )
   `);
+
+  // Existing demo databases predate purpose-based access. Keep their data and
+  // add the fields safely instead of requiring a destructive reset.
+  for (const [column, definition] of [
+    ["priority", "TEXT NOT NULL DEFAULT 'NORMAL'"],
+    ["access_mode", "TEXT NOT NULL DEFAULT 'STANDARD'"],
+    ["approval_note", "TEXT"],
+  ]) {
+    try { await run(`ALTER TABLE erp_access_requests ADD COLUMN ${column} ${definition}`); }
+    catch (err) { if (!String(err.message).includes("duplicate column name")) throw err; }
+  }
   await run(`
     CREATE TABLE IF NOT EXISTS erp_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT, record_id TEXT UNIQUE NOT NULL, module TEXT NOT NULL,
@@ -167,6 +179,14 @@ async function initDb() {
       PRIMARY KEY (employee_id, tour_version)
     )
   `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS erp_security_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, alert_id TEXT UNIQUE NOT NULL, employee_id TEXT,
+      alert_type TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'OPEN',
+      evidence_count INTEGER NOT NULL DEFAULT 1, summary TEXT NOT NULL, created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
 
   await seedErpDemo();
 
@@ -189,6 +209,7 @@ async function resetDb() {
   await run("DROP TABLE IF EXISTS erp_records");
   await run("DROP TABLE IF EXISTS erp_audit_logs");
   await run("DROP TABLE IF EXISTS erp_guide_progress");
+  await run("DROP TABLE IF EXISTS erp_security_alerts");
   await initDb();
   console.log("✓ Database reset cleanly.");
 }
@@ -226,6 +247,7 @@ async function seedErpDemo() {
     ["BEL-EMP-1008", "Arjun Menon", "arjun.menon@demo.bel", "EMPLOYEE", "BENGALURU", "VIGILANCE", "CORPORATE", "COMPLIANCE_OFFICER", "Compliance / Vigilance Officer"],
     ["BEL-EMP-1009", "Neha Iyer", "neha.iyer@demo.bel", "EMPLOYEE", "BENGALURU", "INTERNAL_AUDIT", "CORPORATE", "INTERNAL_AUDITOR", "Internal Auditor"],
     ["BEL-EMP-1010", "Rohan Sharma", "rohan.sharma@demo.bel", "EMPLOYEE", "BENGALURU", "IT", "CORPORATE", "ERP_ADMIN", "ERP Administrator"],
+    ["BEL-EMP-1011", "Kavya Rao", "kavya.rao@demo.bel", "EMPLOYEE", "BENGALURU", "SECURITY", "CORPORATE", "ASSET_CUSTODY_APPROVER", "Asset Custody Security Approver"],
     ["VEN-0001", "NovaTech Components Pvt. Ltd.", "portal@novatech.demo", "VENDOR", "BENGALURU", "PROCUREMENT", "BENGALURU_SOFTWARE", "VENDOR", "Approved Vendor"],
     ["CUS-0001", "Defence Systems Demo Client", "client@defence-demo.example", "CUSTOMER", "BENGALURU", "SALES", "CORPORATE", "CUSTOMER", "Customer / Government Client"],
   ];

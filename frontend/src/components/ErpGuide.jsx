@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { erpApi } from '../api/client';
 
-const TOUR_VERSION = '1.0';
+const TOUR_VERSION = '1.1';
 
 const ROLE_TOURS = {
   PROCUREMENT_OFFICER: [
@@ -27,6 +27,7 @@ const ROLE_TOURS = {
   ],
   ENGINEERING_OFFICER: [
     ['dashboard-overview', 'dashboard', 'Your dashboard', 'Start here to see your authorized engineering work and recent activity.'],
+    ['sidebar-asset-passport', 'asset-passport', 'Asset Passport', 'Use Asset Passport to verify an asset’s custody record and protected document integrity before a handover.'],
     ['sidebar-engineering', 'engineering', 'R&D and engineering', 'This module contains the engineering records assigned to your workspace.'],
     ['sidebar-projects', 'projects', 'Project management', 'Use this area to view project information available to your role.'],
     ['profile-details', 'profile', 'Your profile', 'Your role, unit, department, and SBU define the features you can use.'],

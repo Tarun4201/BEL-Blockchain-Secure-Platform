@@ -11,6 +11,7 @@ import "./IIdentityRegistry.sol";
  */
 contract AssetRegistry is ERC721URIStorage {
     address public admin;
+    address public immutable securityApprover;
     IIdentityRegistry public immutable identityRegistry;
     uint256 private _nextTokenId = 1;
 
@@ -38,10 +39,25 @@ contract AssetRegistry is ERC721URIStorage {
         uint256 mintedAt;
     }
 
+    struct PendingTransfer {
+        string newOwnerDid;
+        address proposedBy;
+        uint256 proposedAt;
+        bool active;
+    }
+
+    struct ServiceRecord {
+        string serviceReference;
+        address recordedBy;
+        uint256 timestamp;
+    }
+
     // Mapping from assetId to AssetInfo
     mapping(uint256 => AssetInfo) private _assetInfos;
     // Mapping from assetId to full chronological history
     mapping(uint256 => OwnershipRecord[]) private _ownershipHistories;
+    mapping(uint256 => PendingTransfer) private _pendingTransfers;
+    mapping(uint256 => ServiceRecord[]) private _serviceHistories;
     // Array of all asset IDs
     uint256[] private _allAssetIds;
 
@@ -67,15 +83,20 @@ contract AssetRegistry is ERC721URIStorage {
         address indexed retiredBy,
         uint256 timestamp
     );
+    event HighAssuranceTransferProposed(uint256 indexed assetId, string toDid, address indexed proposedBy, uint256 timestamp);
+    event HighAssuranceTransferApproved(uint256 indexed assetId, string fromDid, string toDid, address indexed approvedBy, uint256 timestamp);
+    event AssetServiceRecorded(uint256 indexed assetId, string serviceReference, address indexed recordedBy, uint256 timestamp);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "AssetRegistry: caller is not admin");
         _;
     }
 
-    constructor(address identityRegistryAddress) ERC721("BEL Defense Asset", "BELD") {
+    constructor(address identityRegistryAddress, address securityApproverAddress) ERC721("BEL Defense Asset", "BELD") {
         require(identityRegistryAddress != address(0), "AssetRegistry: zero identity registry");
+        require(securityApproverAddress != address(0), "AssetRegistry: zero security approver");
         admin = msg.sender;
+        securityApprover = securityApproverAddress;
         identityRegistry = IIdentityRegistry(identityRegistryAddress);
     }
 
@@ -131,22 +152,42 @@ contract AssetRegistry is ERC721URIStorage {
         require(bytes(newOwnerDid).length > 0, "AssetRegistry: empty new owner DID");
         require(identityRegistry.isRegistered(newOwnerDid), "AssetRegistry: owner DID is not registered");
 
+        _completeTransfer(assetId, newOwnerDid, msg.sender);
+    }
+
+    function proposeHighAssuranceTransfer(uint256 assetId, string calldata newOwnerDid) external onlyAdmin {
+        require(_assetInfos[assetId].mintedAt > 0, "AssetRegistry: asset does not exist");
+        require(_assetInfos[assetId].status == AssetStatus.ACTIVE, "AssetRegistry: asset is retired");
+        require(identityRegistry.isRegistered(newOwnerDid), "AssetRegistry: owner DID is not registered");
+        _pendingTransfers[assetId] = PendingTransfer(newOwnerDid, msg.sender, block.timestamp, true);
+        emit HighAssuranceTransferProposed(assetId, newOwnerDid, msg.sender, block.timestamp);
+    }
+
+    function approveHighAssuranceTransfer(uint256 assetId) external {
+        require(msg.sender == securityApprover, "AssetRegistry: caller is not security approver");
+        PendingTransfer memory pending = _pendingTransfers[assetId];
+        require(pending.active, "AssetRegistry: no pending transfer");
+        string memory fromDid = _assetInfos[assetId].currentOwnerDid;
+        delete _pendingTransfers[assetId];
+        _completeTransfer(assetId, pending.newOwnerDid, msg.sender);
+        emit HighAssuranceTransferApproved(assetId, fromDid, pending.newOwnerDid, msg.sender, block.timestamp);
+    }
+
+    function recordService(uint256 assetId, string calldata serviceReference) external onlyAdmin {
+        require(_assetInfos[assetId].mintedAt > 0, "AssetRegistry: asset does not exist");
+        require(bytes(serviceReference).length > 0, "AssetRegistry: empty service reference");
+        _serviceHistories[assetId].push(ServiceRecord(serviceReference, msg.sender, block.timestamp));
+        emit AssetServiceRecorded(assetId, serviceReference, msg.sender, block.timestamp);
+    }
+
+    function _completeTransfer(uint256 assetId, string memory newOwnerDid, address actor) internal {
         string memory fromDid = _assetInfos[assetId].currentOwnerDid;
         (, address newOwnerWallet, , , ) = identityRegistry.getIdentity(newOwnerDid);
-        address previousOwnerWallet = ownerOf(assetId);
-        _transfer(previousOwnerWallet, newOwnerWallet, assetId);
+        _transfer(ownerOf(assetId), newOwnerWallet, assetId);
         _assetInfos[assetId].currentOwnerDid = newOwnerDid;
         _assetInfos[assetId].currentOwnerWallet = newOwnerWallet;
-
-        _ownershipHistories[assetId].push(OwnershipRecord({
-            assetId: assetId,
-            fromDid: fromDid,
-            toDid: newOwnerDid,
-            transferredBy: msg.sender,
-            timestamp: block.timestamp
-        }));
-
-        emit AssetTransferred(assetId, fromDid, newOwnerDid, msg.sender, block.timestamp);
+        _ownershipHistories[assetId].push(OwnershipRecord(assetId, fromDid, newOwnerDid, actor, block.timestamp));
+        emit AssetTransferred(assetId, fromDid, newOwnerDid, actor, block.timestamp);
     }
 
     /**
@@ -201,6 +242,9 @@ contract AssetRegistry is ERC721URIStorage {
         require(_assetInfos[assetId].mintedAt > 0, "AssetRegistry: asset does not exist");
         return _ownershipHistories[assetId];
     }
+
+    function getPendingTransfer(uint256 assetId) external view returns (PendingTransfer memory) { return _pendingTransfers[assetId]; }
+    function getServiceHistory(uint256 assetId) external view returns (ServiceRecord[] memory) { return _serviceHistories[assetId]; }
 
     /**
      * @notice Get total asset count.

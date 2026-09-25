@@ -2,10 +2,10 @@
   "network": "localhost",
   "chainId": 31337,
   "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  "deployedAt": "2026-09-23T08:53:18.437Z",
+  "deployedAt": "2026-09-25T14:51:12.619Z",
   "contracts": {
     "IdentityRegistry": {
-      "address": "0x59b670e9fA9D0A427751Af201D676719a970857b",
+      "address": "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690",
       "abi": [
         {
           "inputs": [],
@@ -292,7 +292,7 @@
       ]
     },
     "AccessControlManager": {
-      "address": "0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1",
+      "address": "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB",
       "abi": [
         {
           "inputs": [
@@ -860,13 +860,18 @@
       ]
     },
     "AssetRegistry": {
-      "address": "0x322813Fd9A801c5507c9de605d63CEA4f2CE6c44",
+      "address": "0x9E545E3C0baAB3E08CdfD552C960A1050f373042",
       "abi": [
         {
           "inputs": [
             {
               "internalType": "address",
               "name": "identityRegistryAddress",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "securityApproverAddress",
               "type": "address"
             }
           ],
@@ -1106,6 +1111,37 @@
             {
               "indexed": false,
               "internalType": "string",
+              "name": "serviceReference",
+              "type": "string"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "recordedBy",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            }
+          ],
+          "name": "AssetServiceRecorded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
               "name": "fromDid",
               "type": "string"
             },
@@ -1148,6 +1184,74 @@
             }
           ],
           "name": "BatchMetadataUpdate",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "fromDid",
+              "type": "string"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "toDid",
+              "type": "string"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "approvedBy",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            }
+          ],
+          "name": "HighAssuranceTransferApproved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "toDid",
+              "type": "string"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "proposedBy",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            }
+          ],
+          "name": "HighAssuranceTransferProposed",
           "type": "event"
         },
         {
@@ -1215,6 +1319,19 @@
             }
           ],
           "name": "approve",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
+            }
+          ],
+          "name": "approveHighAssuranceTransfer",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -1421,6 +1538,83 @@
           "type": "function"
         },
         {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getPendingTransfer",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "string",
+                  "name": "newOwnerDid",
+                  "type": "string"
+                },
+                {
+                  "internalType": "address",
+                  "name": "proposedBy",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "proposedAt",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "active",
+                  "type": "bool"
+                }
+              ],
+              "internalType": "struct AssetRegistry.PendingTransfer",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getServiceHistory",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "string",
+                  "name": "serviceReference",
+                  "type": "string"
+                },
+                {
+                  "internalType": "address",
+                  "name": "recordedBy",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "timestamp",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct AssetRegistry.ServiceRecord[]",
+              "name": "",
+              "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [],
           "name": "identityRegistry",
           "outputs": [
@@ -1524,6 +1718,42 @@
               "internalType": "uint256",
               "name": "assetId",
               "type": "uint256"
+            },
+            {
+              "internalType": "string",
+              "name": "newOwnerDid",
+              "type": "string"
+            }
+          ],
+          "name": "proposeHighAssuranceTransfer",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "string",
+              "name": "serviceReference",
+              "type": "string"
+            }
+          ],
+          "name": "recordService",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "assetId",
+              "type": "uint256"
             }
           ],
           "name": "retireAsset",
@@ -1580,6 +1810,19 @@
           "name": "safeTransferFrom",
           "outputs": [],
           "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "securityApprover",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
           "type": "function"
         },
         {
