@@ -1,11 +1,27 @@
 const path = require("path");
 const hre = require("hardhat");
+const { ethers } = require("ethers");
 const { resetDb, run } = require("../backend/db");
 const { computeFileHash } = require("../backend/utils/hasher");
 const { rebuildIndexFromChain } = require("../backend/indexer");
 require("dotenv").config({ path: path.join(__dirname, "..", "backend", ".env") });
 
 const DOCS_DIR = path.join(__dirname, "..", "backend", "storage", "documents");
+
+async function getDemoSigners() {
+  const localSigners = await hre.ethers.getSigners();
+  if (hre.network.name === "hardhat" || hre.network.name === "localhost") {
+    return localSigners.slice(0, 3);
+  }
+
+  const requiredKeys = ["ADMIN_PRIVATE_KEY", "SHARMA_PRIVATE_KEY", "VERMA_PRIVATE_KEY"];
+  for (const key of requiredKeys) {
+    if (!process.env[key]) {
+      throw new Error(`${key} is required to seed the ${hre.network.name} demo environment.`);
+    }
+  }
+  return requiredKeys.map((key) => new ethers.Wallet(process.env[key], hre.ethers.provider));
+}
 
 async function seed() {
   console.log("==========================================");
@@ -16,7 +32,7 @@ async function seed() {
   console.log("--> Resetting SQLite database tables...");
   await resetDb();
 
-  const [adminSigner, sharmaSigner, vermaSigner] = await hre.ethers.getSigners();
+  const [adminSigner, sharmaSigner, vermaSigner] = await getDemoSigners();
   console.log("Admin Signer Address:", adminSigner.address);
 
   // Load contract config

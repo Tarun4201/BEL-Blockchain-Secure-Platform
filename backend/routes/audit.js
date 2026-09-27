@@ -56,6 +56,9 @@ router.get("/", async (req, res) => {
 
     const totalCount = await get("SELECT COUNT(*) as count FROM audit_index");
 
+    const deployment = (() => {
+      try { return loadContractsConfig(); } catch { return null; }
+    })();
     res.json({
       total: totalCount ? totalCount.count : formatted.length,
       events: formatted,
@@ -123,7 +126,7 @@ router.get("/status", async (req, res) => {
       status: "operational",
       isNodeConnected,
       currentBlockNumber: blockNumber,
-      network: "Hardhat Local (ChainID: 31337)",
+      network: deployment ? `${deployment.network} (Chain ID: ${deployment.chainId})` : "Blockchain configuration unavailable",
       counts: {
         identities: totalIdentities ? totalIdentities.count : 0,
         resources: totalResources ? totalResources.count : 0,

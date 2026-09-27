@@ -3,7 +3,10 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 
-const DB_PATH = path.join(__dirname, "bel_platform.db");
+// Local development keeps the database beside the backend. A hosted service can
+// point this at its mounted persistent disk with BEL_DB_PATH.
+const DB_PATH = process.env.BEL_DB_PATH || path.join(__dirname, "bel_platform.db");
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {

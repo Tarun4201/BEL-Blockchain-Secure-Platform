@@ -2,6 +2,17 @@ require("@nomicfoundation/hardhat-ethers");
 require("@nomicfoundation/hardhat-chai-matchers");
 require("dotenv").config();
 
+const sepoliaRpcUrl = process.env.SEPOLIA_RPC_URL || process.env.RPC_URL;
+const sepoliaNetwork = sepoliaRpcUrl && process.env.DEPLOYER_PRIVATE_KEY
+  ? {
+      sepolia: {
+        url: sepoliaRpcUrl,
+        accounts: [process.env.DEPLOYER_PRIVATE_KEY],
+        chainId: 11155111,
+      },
+    }
+  : {};
+
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
@@ -22,6 +33,7 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
+    ...sepoliaNetwork,
   },
   paths: {
     sources: "./contracts",

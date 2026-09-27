@@ -16,6 +16,7 @@ const erpRouter = require("./routes/erp");
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+const FRONTEND_DIST = path.join(__dirname, "..", "frontend", "dist");
 
 app.use(cors());
 app.use(express.json());
@@ -57,15 +58,29 @@ app.get("/api/status", async (req, res) => {
       get("SELECT COUNT(*) as count FROM resources_meta"),
       get("SELECT COUNT(*) as count FROM assets_meta"),
     ]);
+    const deployment = (() => {
+      try { return loadContractsConfig(); } catch { return null; }
+    })();
     res.json({
       status: "operational", isNodeConnected, currentBlockNumber: blockNumber,
-      network: "Hardhat Local (ChainID: 31337)",
+      network: deployment ? `${deployment.network} (Chain ID: ${deployment.chainId})` : "Blockchain configuration unavailable",
       counts: { identities: ids?.count || 0, resources: res_?.count || 0, assets: assets?.count || 0, auditEvents: audit?.count || 0 },
       contracts: Object.keys(contracts).map((n) => ({ name: n, address: contracts[n].address })),
       timestamp: new Date().toISOString(),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// In production, Express serves the already-built React application. Vite still
+// serves the frontend locally, so hot reload and the existing dev workflow stay
+// unchanged.
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(FRONTEND_DIST));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) return next();
+    return res.sendFile(path.join(FRONTEND_DIST, "index.html"));
+  });
+}
 
 
 async function startServer() {
@@ -77,6 +92,13 @@ async function startServer() {
 
     // 1. Initialize SQLite database tables
     await initDb();
+
+    if (process.env.NODE_ENV === "production") {
+      if (!require("fs").existsSync(FRONTEND_DIST)) {
+        throw new Error("Frontend build is missing. Run `npm run build --prefix frontend` before starting production.");
+      }
+      await require("./blockchain").validateProductionConfiguration();
+    }
 
     // 2. Start Express server
     app.listen(PORT, () => {
