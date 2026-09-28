@@ -7,12 +7,17 @@ async function main() {
   console.log("Deploying BEL Blockchain Platform Contracts");
   console.log("==========================================");
 
-  const [deployer, securityApprover] = await hre.ethers.getSigners();
+  const signers = await hre.ethers.getSigners();
+  const deployer = signers[0];
+  const securityApprover = signers[1] || deployer;
   console.log("Deploying with account:", deployer.address);
+  console.log("Security Approver account:", securityApprover.address);
 
   // 1. Deploy IdentityRegistry
   const IdentityRegistry = await hre.ethers.getContractFactory("IdentityRegistry");
   const identityRegistry = await IdentityRegistry.deploy();
+  const identityTx = identityRegistry.deploymentTransaction();
+  console.log("  Deploying IdentityRegistry, tx:", identityTx ? identityTx.hash : "n/a");
   await identityRegistry.waitForDeployment();
   const identityAddress = await identityRegistry.getAddress();
   console.log("✓ IdentityRegistry deployed to:", identityAddress);
@@ -20,6 +25,8 @@ async function main() {
   // 2. Deploy AccessControlManager
   const AccessControlManager = await hre.ethers.getContractFactory("AccessControlManager");
   const accessControl = await AccessControlManager.deploy(identityAddress);
+  const accessTx = accessControl.deploymentTransaction();
+  console.log("  Deploying AccessControlManager, tx:", accessTx ? accessTx.hash : "n/a");
   await accessControl.waitForDeployment();
   const accessControlAddress = await accessControl.getAddress();
   console.log("✓ AccessControlManager deployed to:", accessControlAddress);
@@ -27,6 +34,8 @@ async function main() {
   // 3. Deploy AssetRegistry (ERC-721)
   const AssetRegistry = await hre.ethers.getContractFactory("AssetRegistry");
   const assetRegistry = await AssetRegistry.deploy(identityAddress, securityApprover.address);
+  const assetTx = assetRegistry.deploymentTransaction();
+  console.log("  Deploying AssetRegistry, tx:", assetTx ? assetTx.hash : "n/a");
   await assetRegistry.waitForDeployment();
   const assetRegistryAddress = await assetRegistry.getAddress();
   console.log("✓ AssetRegistry (ERC-721) deployed to:", assetRegistryAddress);
@@ -44,14 +53,17 @@ async function main() {
     contracts: {
       IdentityRegistry: {
         address: identityAddress,
+        txHash: identityTx ? identityTx.hash : null,
         abi: identityArtifact.abi,
       },
       AccessControlManager: {
         address: accessControlAddress,
+        txHash: accessTx ? accessTx.hash : null,
         abi: accessControlArtifact.abi,
       },
       AssetRegistry: {
         address: assetRegistryAddress,
+        txHash: assetTx ? assetTx.hash : null,
         abi: assetRegistryArtifact.abi,
       },
     },

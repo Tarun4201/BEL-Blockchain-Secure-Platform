@@ -16,7 +16,10 @@ async function seed() {
   console.log("--> Resetting SQLite database tables...");
   await resetDb();
 
-  const [adminSigner, sharmaSigner, vermaSigner] = await hre.ethers.getSigners();
+  const signers = await hre.ethers.getSigners();
+  const adminSigner = signers[0];
+  const sharmaSigner = signers[1] || adminSigner;
+  const vermaSigner = signers[2] || adminSigner;
   console.log("Admin Signer Address:", adminSigner.address);
 
   // Load contract config

@@ -1,22 +1,51 @@
-const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
-const DB_PATH = path.join(__dirname, "bel_platform.db");
+const TURSO_URL = process.env.TURSO_DATABASE_URL || (process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith("libsql:") || process.env.DATABASE_URL.startsWith("https:")) ? process.env.DATABASE_URL : null);
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN || process.env.DATABASE_AUTH_TOKEN || null;
 
-const db = new sqlite3.Database(DB_PATH, (err) => {
-  if (err) {
-    console.error("Error opening SQLite database:", err.message);
-  } else {
-    console.log("Connected to SQLite database at:", DB_PATH);
+let libsqlClient = null;
+let sqliteDb = null;
+
+const DB_PATH = process.env.SQLITE_PATH || process.env.DATABASE_PATH || path.join(__dirname, "bel_platform.db");
+
+if (TURSO_URL) {
+  try {
+    const { createClient } = require("@libsql/client");
+    libsqlClient = createClient({
+      url: TURSO_URL,
+      authToken: TURSO_TOKEN,
+    });
+    console.log("✓ Connected to persistent cloud database (Turso / libSQL):", TURSO_URL.replace(/:[^:@]+@/, ":***@"));
+  } catch (err) {
+    console.warn("Could not initialize libSQL client, falling back to SQLite:", err.message);
   }
-});
+}
 
-// Wrap sqlite3 methods in Promises for clean async/await usage
+if (!libsqlClient) {
+  const sqlite3 = require("sqlite3").verbose();
+  sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
+    if (err) {
+      console.error("Error opening SQLite database:", err.message);
+    } else {
+      console.log("Connected to SQLite database at:", DB_PATH);
+    }
+  });
+}
+
+// Wrap database operations in clean async/await functions
 function run(sql, params = []) {
+  if (libsqlClient) {
+    return libsqlClient.execute({ sql, args: params }).then((res) => ({
+      lastID: Number(res.lastInsertRowid || 0),
+      changes: res.rowsAffected || 0,
+    }));
+  }
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
+    sqliteDb.run(sql, params, function (err) {
       if (err) reject(err);
       else resolve({ lastID: this.lastID, changes: this.changes });
     });
@@ -24,8 +53,14 @@ function run(sql, params = []) {
 }
 
 function get(sql, params = []) {
+  if (libsqlClient) {
+    return libsqlClient.execute({ sql, args: params }).then((res) => {
+      if (!res.rows || res.rows.length === 0) return null;
+      return res.rows[0];
+    });
+  }
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
+    sqliteDb.get(sql, params, (err, row) => {
       if (err) reject(err);
       else resolve(row);
     });
@@ -33,8 +68,11 @@ function get(sql, params = []) {
 }
 
 function all(sql, params = []) {
+  if (libsqlClient) {
+    return libsqlClient.execute({ sql, args: params }).then((res) => res.rows || []);
+  }
   return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
+    sqliteDb.all(sql, params, (err, rows) => {
       if (err) reject(err);
       else resolve(rows);
     });
@@ -284,7 +322,7 @@ async function seedErpDemo() {
 }
 
 module.exports = {
-  db,
+  db: sqliteDb || libsqlClient,
   run,
   get,
   all,

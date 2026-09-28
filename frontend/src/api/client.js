@@ -1,4 +1,8 @@
-const BASE = '/api';
+const rawBase = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL?.trim();
+const BASE = rawBase
+  ? (rawBase.endsWith('/api') ? rawBase.replace(/\/+$/, '') : `${rawBase.replace(/\/+$/, '')}/api`)
+  : '/api';
+
 
 async function req(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };

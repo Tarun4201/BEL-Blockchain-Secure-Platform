@@ -5,21 +5,38 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
-const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, { polling: true, pollingInterval: 2000 });
-provider.on("error", () => {
-  // Gracefully ignore transient filter resets during hardhat redeployments
+const POLLING_INTERVAL = parseInt(process.env.RPC_POLLING_INTERVAL || "2500", 10);
+const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, { polling: true, pollingInterval: POLLING_INTERVAL });
+provider.on("error", (err) => {
+  // Gracefully log/ignore transient network filter resets
+  if (process.env.DEBUG_RPC) console.warn("[RPC Provider Notice]:", err.message);
 });
 
-// Load deployed contracts configuration
+// Load deployed contracts configuration with optional environment variable overrides
 const contractsConfigPath = path.join(__dirname, "config", "contracts.json");
 
 function loadContractsConfig() {
-  if (!fs.existsSync(contractsConfigPath)) {
-    throw new Error(
-      `Contracts configuration not found at ${contractsConfigPath}. Please run the deployment script first.`
-    );
+  let config = { contracts: {} };
+  if (fs.existsSync(contractsConfigPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(contractsConfigPath, "utf8"));
+    } catch (e) {
+      console.warn("Could not parse contracts.json:", e.message);
+    }
   }
-  return JSON.parse(fs.readFileSync(contractsConfigPath, "utf8"));
+
+  // Allow environment variables to override contract addresses
+  if (process.env.IDENTITY_REGISTRY_ADDRESS && config.contracts.IdentityRegistry) {
+    config.contracts.IdentityRegistry.address = process.env.IDENTITY_REGISTRY_ADDRESS;
+  }
+  if (process.env.ACCESS_CONTROL_ADDRESS && config.contracts.AccessControlManager) {
+    config.contracts.AccessControlManager.address = process.env.ACCESS_CONTROL_ADDRESS;
+  }
+  if (process.env.ASSET_REGISTRY_ADDRESS && config.contracts.AssetRegistry) {
+    config.contracts.AssetRegistry.address = process.env.ASSET_REGISTRY_ADDRESS;
+  }
+
+  return config;
 }
 
 // Pre-configured signers from environment variables (defaults to Hardhat local accounts)
