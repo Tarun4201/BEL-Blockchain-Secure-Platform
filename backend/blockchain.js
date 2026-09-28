@@ -4,16 +4,47 @@ const { ethers } = require("ethers");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
-const POLLING_INTERVAL = parseInt(process.env.RPC_POLLING_INTERVAL || "2500", 10);
-const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, { polling: true, pollingInterval: POLLING_INTERVAL });
+// Load deployed contracts configuration with optional environment variable overrides
+const contractsConfigPath = path.join(__dirname, "config", "contracts.json");
+
+function getSavedNetworkConfig() {
+  if (fs.existsSync(contractsConfigPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(contractsConfigPath, "utf8"));
+    } catch (e) {
+      return {};
+    }
+  }
+  return {};
+}
+
+const savedConfig = getSavedNetworkConfig();
+const DEFAULT_AMOY_RPC = "https://polygon-amoy-bor-rpc.publicnode.com";
+
+const RPC_URL =
+  process.env.RPC_URL ||
+  process.env.AMOY_RPC_URL ||
+  process.env.POLYGON_AMOY_RPC_URL ||
+  process.env.POLYGON_RPC_URL ||
+  (process.env.NODE_ENV === "production" ||
+  process.env.CHAIN_ID === "80002" ||
+  savedConfig.chainId === 80002 ||
+  savedConfig.network === "amoy"
+    ? DEFAULT_AMOY_RPC
+    : "http://127.0.0.1:8545");
+
+const POLLING_INTERVAL = parseInt(process.env.RPC_POLLING_INTERVAL || "3000", 10);
+const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, {
+  polling: true,
+  pollingInterval: POLLING_INTERVAL,
+});
+console.log("✓ Connected to Blockchain RPC Provider:", RPC_URL);
+
 provider.on("error", (err) => {
-  // Gracefully log/ignore transient network filter resets
-  if (process.env.DEBUG_RPC) console.warn("[RPC Provider Notice]:", err.message);
+  console.warn("[RPC Provider Notice]:", err.message || err);
 });
 
 // Load deployed contracts configuration with optional environment variable overrides
-const contractsConfigPath = path.join(__dirname, "config", "contracts.json");
 
 function loadContractsConfig() {
   let config = { contracts: {} };
