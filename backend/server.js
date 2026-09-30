@@ -18,8 +18,29 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 const FRONTEND_DIST = path.join(__dirname, "..", "frontend", "dist");
 
-app.use(cors());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+  : null;
+
+app.use(
+  cors({
+    origin: allowedOrigins && allowedOrigins.length > 0
+      ? (origin, callback) => {
+          if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            callback(null, true); // Permissive default to support Vercel preview URLs
+          }
+        }
+      : true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-erp-session", "x-requested-with"],
+  })
+);
+app.options("*", cors());
 app.use(express.json());
+
 
 // Request logging for audit transparency
 app.use((req, res, next) => {
@@ -48,8 +69,16 @@ app.get("/api/status", async (req, res) => {
   try {
     const { provider, loadContractsConfig } = require("./blockchain");
     const { get } = require("./db");
-    let blockNumber = 0, isNodeConnected = false;
-    try { blockNumber = await provider.getBlockNumber(); isNodeConnected = true; } catch {}
+    let blockNumber = 0, isNodeConnected = false, networkName = "Offline / Unconnected";
+    try {
+      const [block, net] = await Promise.all([
+        provider.getBlockNumber(),
+        provider.getNetwork(),
+      ]);
+      blockNumber = block;
+      isNodeConnected = true;
+      networkName = process.env.BLOCKCHAIN_NETWORK_NAME || `${net.name === "unknown" ? "EVM Network" : net.name} (ChainID: ${net.chainId})`;
+    } catch {}
     let contracts = {};
     try { contracts = loadContractsConfig().contracts; } catch {}
     const [audit, ids, res_, assets] = await Promise.all([
@@ -62,9 +91,16 @@ app.get("/api/status", async (req, res) => {
       try { return loadContractsConfig(); } catch { return null; }
     })();
     res.json({
-      status: "operational", isNodeConnected, currentBlockNumber: blockNumber,
-      network: deployment ? `${deployment.network} (Chain ID: ${deployment.chainId})` : "Blockchain configuration unavailable",
-      counts: { identities: ids?.count || 0, resources: res_?.count || 0, assets: assets?.count || 0, auditEvents: audit?.count || 0 },
+      status: "operational",
+      isNodeConnected,
+      currentBlockNumber: blockNumber,
+      network: deployment?.network ? `${deployment.network} (Chain ID: ${deployment.chainId})` : networkName,
+      counts: {
+        identities: ids?.count || 0,
+        resources: res_?.count || 0,
+        assets: assets?.count || 0,
+        auditEvents: audit?.count || 0,
+      },
       contracts: Object.keys(contracts).map((n) => ({ name: n, address: contracts[n].address })),
       timestamp: new Date().toISOString(),
     });

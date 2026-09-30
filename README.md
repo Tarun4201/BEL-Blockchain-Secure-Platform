@@ -1,308 +1,303 @@
-# Bharat Electronics Limited (BEL) — Blockchain-Based Secure Identity, Access Control & Digital Asset Management Platform
+# Bharat Electronics Limited (BEL) — Blockchain-Based Secure Identity, Access Control & Digital Asset Platform
 
-> **Defence-Grade Prototype** for Decentralized Identity (DID), Role-Independent Attribute-Based Access Control (ABAC), ERC-721 Digital Asset Custody Tracking, and Cryptographic Tamper-Evident Document Verification.
+> **Defence-Grade Production & MVP Platform** for Decentralized Identity (DID), Explicit Attribute-Based Access Control (ABAC), ERC-721 Digital Asset Custody Tracking, Off-Chain Document Cryptographic Anchoring, and Automated Blockchain Event Audit Indexing.
+
+---
+
+## 🌐 Live Production Deployment
+
+| Component | Service | Status / Link |
+| :--- | :--- | :--- |
+| **Live Demo Application** | **Vercel** | **[https://bel-blockchain-secure-platform-livid.vercel.app/](https://bel-blockchain-secure-platform-livid.vercel.app/)** |
+| **Backend REST API** | **Render** | `https://bel-blockchain-secure-platform.onrender.com` |
+| **Cloud Database** | **Turso (libSQL)** | AWS Asia-Pacific (Mumbai) Serverless Instance |
+| **Blockchain Network** | **Polygon Amoy** | Public EVM Testnet (Chain ID: `80002`) |
+
+> **24/7 Cloud Availability:** The deployed platform operates 100% autonomously in the cloud across Vercel, Render, Turso, and Polygon Amoy without requiring any local developer PC or workstation to remain online.
+
+---
+
+## 📜 Deployed Smart Contracts (Polygon Amoy Testnet)
+
+All smart contracts are verified and deployed on the **Polygon Amoy Testnet** (Chain ID: `80002`):
+
+| Contract | Address | Polygonscan Block Explorer |
+| :--- | :--- | :--- |
+| **`IdentityRegistry`** | `0xC928127C89339269645217cC7aAB8c604Fa717f3` | [View on Amoy Polygonscan](https://amoy.polygonscan.com/address/0xC928127C89339269645217cC7aAB8c604Fa717f3) |
+| **`AccessControlManager`** | `0x2FFD26016cb9F1638f86d03Fb118B90288B8bf64` | [View on Amoy Polygonscan](https://amoy.polygonscan.com/address/0x2FFD26016cb9F1638f86d03Fb118B90288B8bf64) |
+| **`AssetRegistry` (ERC-721)** | `0xb2A2D16CbE6B56c278341d40ee70f1F723Bfe62f` | [View on Amoy Polygonscan](https://amoy.polygonscan.com/address/0xb2A2D16CbE6B56c278341d40ee70f1F723Bfe62f) |
 
 ---
 
 ## Table of Contents
-1. [Executive Overview](#executive-overview)
-2. [Key Architecture & Core Principles](#key-architecture--core-principles)
-3. [Prerequisites](#prerequisites)
-4. [Quick Start (One-Command Setup & Run)](#quick-start-one-command-setup--run)
-5. [Step-by-Step Multi-Terminal Workflow](#step-by-step-multi-terminal-workflow)
-6. [Demo Personas](#demo-personas)
-7. [Full Demo Walkthrough Guide (Presentation Ready)](#full-demo-walkthrough-guide-presentation-ready)
-8. [Smart Contracts Overview](#smart-contracts-overview)
-9. [Cryptographic Document & Integrity Flow](#cryptographic-document--integrity-flow)
-10. [Rebuilding Audit Index from Blockchain Events](#rebuilding-audit-index-from-blockchain-events)
-11. [Resetting the Demo Environment](#resetting-the-demo-environment)
-12. [Troubleshooting & FAQs](#troubleshooting--faqs)
-13. [Prototype Security Notice & Limitations](#prototype-security-notice--limitations)
+1. [Executive Summary & Problem Statement](#executive-summary--problem-statement)
+2. [End-to-End System Architecture](#end-to-end-system-architecture)
+3. [Core Capabilities & Functional Modules](#core-capabilities--functional-modules)
+4. [Technology Stack](#technology-stack)
+5. [Demo Personas & Presentation Flow](#demo-personas--presentation-flow)
+6. [Smart Contracts Architecture](#smart-contracts-architecture)
+7. [Cryptographic Document & Integrity Flow](#cryptographic-document--integrity-flow)
+8. [Local Development & Testing](#local-development--testing)
+9. [Production Cloud Deployment](#production-cloud-deployment)
+10. [Security & Environment Hygiene](#security--environment-hygiene)
+11. [Known Limitations & Future Roadmap (SIH Context)](#known-limitations--future-roadmap-sih-context)
 
 ---
 
-## Executive Overview
+## Executive Summary & Problem Statement
 
-In defence applications, traditional centralized databases represent single points of failure, vulnerable to insider threats, unauthorized data manipulation, and lack of verifiable auditability. 
+In mission-critical defence manufacturing and electronics fabrication environments like **Bharat Electronics Limited (BEL)**, traditional perimeter security and centralized databases represent single points of failure:
+- **Insider Threat Risk:** Central database administrators can modify access logs, tamper with audit trails, or alter equipment maintenance records undetected.
+- **Role Creep & Overprivileged Access:** Relying solely on broad organizational roles (e.g., `ENGINEER`) often grants sweeping access to classified technical schematics without explicit, auditable authorization.
+- **Custody Disputes:** High-value defence hardware modules (such as radar transmitter units and electronic warfare payloads) lack immutable chain-of-title tracking across production units, testing bays, and external armed forces depots.
 
-This platform implements a **blockchain-anchored zero-trust architecture** for Bharat Electronics Limited (BEL), featuring:
-- **Decentralized Identifiers (DIDs):** Every BEL personnel member is assigned a unique on-chain cryptographic identity (`did:bel:0x...`).
-- **Explicit Access Control (Role ≠ Access):** Having a role (e.g. `ENGINEER`) is organizational metadata only. Access to protected resources requires an explicit, immutable on-chain grant issued by an authorized Admin.
-- **ERC-721 Digital Asset Registry:** Defense hardware assets (e.g., Radar Unit RU-204) are tokenized NFTs with verifiable custody chain-of-title.
-- **SHA-256 Off-Chain Document Anchoring:** Classified specifications and schematics remain off-chain, while their cryptographic SHA-256 hashes are anchored directly in smart contracts for instant tamper-evident verification.
-- **Reconstructible Immutable Audit Trail:** Every identity registration, role assignment, access request, grant/revocation, and asset transfer produces on-chain events that can reconstruct the audit database from Genesis Block (#0) at any time.
-
----
-
-## Key Architecture & Core Principles
-
-```
-  +-------------------------------------------------------------------------+
-  |                        React Frontend (Vite)                            |
-  |             (Port 5173 — Dark Navy/Steel Defense UI Theme)              |
-  +-----------------------------------+-------------------------------------+
-                                      | HTTP REST / JSON
-                                      v
-  +-------------------------------------------------------------------------+
-  |                        Express Backend Service                          |
-  |           (Port 5001 — Blockchain Indexer, Cryptographic Hasher)        |
-  +------------------+------------------------------------+-----------------+
-                     |                                    |
-          Ethers.js v6 JSON-RPC                 Local SQLite Index Cache
-                     |                         (Reconstructed from on-chain logs)
-                     v                                    |
-  +-------------------------------------------------------+                 |
-  |              Local Hardhat Blockchain Node            |                 |
-  |                     (Port 8545)                       |<----------------+
-  |                                                       |
-  |   • IdentityRegistry.sol                              |
-  |   • AccessControlManager.sol                          |
-  |   • AssetRegistry.sol (OpenZeppelin ERC-721)          |
-  +-------------------------------------------------------+
-```
+### The BEL Blockchain Solution
+This platform introduces a **Zero-Trust, Blockchain-Anchored Architecture**:
+- **Decentralized Identifiers (DIDs):** Every employee, security officer, and technician is issued a unique on-chain cryptographic identifier (`did:bel:0x...`).
+- **Explicit Access Control (Role ≠ Access):** Having a role is strictly organizational metadata. Access to protected technical specifications requires an explicit, smart-contract-anchored access grant from an authorized Admin.
+- **ERC-721 Digital Asset Registry:** High-assurance defense hardware units are tokenized as NFTs with immutable on-chain custody and maintenance history.
+- **Cryptographic Document Anchoring:** Confidential technical specifications remain stored off-chain, while their cryptographic SHA-256 hashes are anchored in smart contracts for instant tamper-evident integrity checks.
+- **Reconstructible Immutable Audit Trail:** The entire audit database can be erased and completely reconstructed from Genesis block solely by replaying on-chain event logs.
 
 ---
 
-## Prerequisites
+## End-to-End System Architecture
 
-Ensure your development machine has:
-- **Node.js**: `v18.0.0` or higher (`v20.x` or `v22.x` recommended)
-- **npm**: `v9.0.0` or higher
-- **Git**
+```
+                                  [ User Browser ]
+                                         │
+                                         ▼ HTTPS
+                            ┌────────────────────────┐
+                            │    Vercel Frontend     │
+                            │   (React 19 + Vite)    │
+                            └────────────┬───────────┘
+                                         │ REST API (JSON / TLS)
+                                         ▼
+                            ┌────────────────────────┐
+                            │   Render Backend API   │
+                            │ (Node.js Express 24/7) │
+                            └─────┬────────────┬─────┘
+                                  │            │
+                  libSQL Protocol │            │ Ethers.js v6 JSON-RPC
+                                  ▼            ▼
+             ┌─────────────────────────┐  ┌─────────────────────────────┐
+             │    Turso Cloud DB       │  │   Polygon Amoy Testnet      │
+             │ (libSQL Serverless DB)  │  │      (Chain ID: 80002)      │
+             └─────────────────────────┘  └──────────────┬──────────────┘
+                                                         │
+                                           ┌─────────────┴─────────────┐
+                                           │ • IdentityRegistry.sol    │
+                                           │ • AccessControlManager.sol│
+                                           │ • AssetRegistry.sol (NFT) │
+                                           └───────────────────────────┘
+```
 
-No external database servers or cloud accounts are required; the entire stack runs locally and hermetically.
+### Architecture Breakdown:
+1. **User / Browser:** Accesses the high-performance responsive frontend deployed on Vercel's global edge network.
+2. **Vercel Frontend:** Interacts with the backend via secure HTTPS requests; displays interactive dashboards, real-time transaction toasts, cryptographic integrity verifiers, and multi-persona switchers.
+3. **Render Backend:** Runs a continuous Node.js Express service providing REST endpoints, cryptographic SHA-256 hash validation, real-time blockchain event indexers, and persona wallet signing.
+4. **Turso Cloud Database:** Persistent, serverless libSQL database (SQLite-compatible) hosted on AWS Mumbai, caching synced blockchain state, ERP organizational units, and user profiles.
+5. **Polygon Amoy Blockchain:** Public Ethereum-compatible Layer-2 testnet executing Solidity smart contracts and persisting all identity registrations, access grants, asset transfers, and audit logs.
 
 ---
 
-## Quick Start (One-Command Setup & Run)
+## Core Capabilities & Functional Modules
 
-### 1. Clone & Install Dependencies
-```bash
-git clone <repo-url>
-cd sih
-npm install
-```
+### 1. Identity & Role Management (`🪪 Identities`)
+- On-chain registration of personnel DIDs (`did:bel:<wallet_address>`).
+- Role assignment (`ADMIN`, `ENGINEER`, `TECHNICIAN`, `MANAGER`).
+- Provenance tracking (who registered each identity and at what block timestamp).
 
-### 2. Automated Setup
-Run the setup script which initializes `.env`, creates storage directories, installs sub-dependencies, compiles contracts, and prepares configuration:
-```bash
-npm run setup
-```
+### 2. Explicit Access Control (`🔐 Access Control`)
+- **Strict Role ≠ Access Enforcement:** Engineers cannot view classified technical documents without an explicit on-chain grant.
+- **Full Lifecycle:** `Request Access` ➔ `Admin Review Queue` ➔ `On-Chain Grant` ➔ `View Technical Spec` ➔ `Instant Revocation`.
+- Sensitivity level classification (`RESTRICTED`, `SECRET`, `TOP_SECRET`).
 
-### 3. Launch the Stack
-You can launch all services (Local Hardhat Node + Backend + Frontend) concurrently:
-```bash
-npm run dev
-```
+### 3. Digital Asset Registry & Custody (`⚙️ Digital Assets`)
+- ERC-721 tokenized defense assets (e.g., `Radar Unit RU-204`, `EW Jammer Bay 2`).
+- Linear chain-of-custody tracking with transfer logs and security approver requirements.
+- Service lifecycle events (calibration, maintenance, operational deployment, retirement).
 
-Open your browser to: **[http://localhost:5173](http://localhost:5173)**
+### 4. Cryptographic Document Tamper Verification (`🔎 Document Integrity`)
+- Technical specifications are hashed using SHA-256 upon creation.
+- The hash is anchored permanently on Polygon Amoy.
+- Real-time client-side and server-side verification: flags any byte-level modification of off-chain files as a tamper violation.
 
----
+### 5. Reconstructible Immutable Audit Trail (`📋 Audit Trail`)
+- Chronological timeline of all on-chain events (`IdentityRegistered`, `AccessGranted`, `AssetTransferred`, etc.).
+- Direct clickable transaction links to Polygonscan block explorer.
+- **One-Click Index Reconstruction:** Ability to wipe local cache and rebuild the complete audit trail directly from smart contract event logs from Block #0.
 
-## Step-by-Step Multi-Terminal Workflow
-
-For presentations or troubleshooting, running services in separate terminals provides maximum log visibility:
-
-### Terminal 1: Local Blockchain Node
-```bash
-npm run chain
-```
-*Starts local Hardhat Ethereum node at `http://127.0.0.1:8545` with 20 pre-funded test accounts.*
-
-### Terminal 2: Deploy Contracts & Seed Demo Data
-```bash
-npm run reset-demo
-```
-*Deploys the 3 smart contracts, computes SHA-256 hashes of test specifications, anchors them on-chain, seeds the Admin identity, creates protected resources, mints the RU-204 asset, and builds the initial audit index.*
-
-### Terminal 3: Start Backend API
-```bash
-npm run backend
-```
-*Starts Express API at `http://localhost:5001` with real-time on-chain event indexer.*
-
-### Terminal 4: Start Frontend UI
-```bash
-npm run frontend
-```
-*Starts Vite dev server at `http://localhost:5173`.*
+### 6. BEL Enterprise ERP Integration (`🏢 ERP Portal`)
+- Real-time departmental hierarchies (Radars, EW Systems, Missile Systems, Avionics).
+- Cross-departmental clearance workflows and security alert streams.
 
 ---
 
-## Demo Personas
+## Technology Stack
 
-The platform includes 3 pre-configured demo personas accessible via the top-right persona switcher:
-
-| Persona | Name | Role | Department | Purpose in Demo |
-|---|---|---|---|---|
-| **🛡 ADMIN** | Admin (Security Officer) | `ADMIN` | Cyber Security & Directorate | Full administrative rights: registers identities, defines resources, grants/revokes access, mints assets, triggers audit rebuilds. |
-| **👤 SHARMA** | R. Sharma | `ENGINEER` | Radar & Phased Array Systems | Target engineer. Demonstrates that having the `ENGINEER` role does NOT grant automatic access without explicit Admin approval. |
-| **🔧 VERMA** | A. Verma | `TECHNICIAN` | Electronics Fabrication & Maintenance | Target technician for role switching and asset custody transfer. |
-
----
-
-## Full Demo Walkthrough Guide (Presentation Ready)
-
-Follow this 5-minute scenario to showcase all capabilities required by the PRD:
-
-### Step 1: Inspect Seeded Admin Identity
-1. Ensure the active persona is set to **🛡 Admin** (top-right).
-2. Navigate to the **🪪 Identities** tab.
-3. Observe the Admin identity recorded on-chain with DID `did:bel:0xf39fd6...`.
-
-### Step 2: Register R. Sharma & Assign Engineer Role
-1. In the **Register New Employee** form, click the **Fill: R. Sharma** quick button.
-2. Click **⛓ Register on Blockchain**.
-3. Watch the transaction toast transition from **Pending** to **Confirmed On-Chain**.
-4. R. Sharma now appears in the on-chain directory with role `ENGINEER`.
-
-### Step 3: Demonstrate Role ≠ Access (Access Gate Test)
-1. Switch the active persona to **👤 R. Sharma** using the top-right switcher.
-2. Navigate to the **🔐 Access Control** tab.
-3. Locate **Radar Test Bay 3 — High-Frequency Phased Array** (`RADAR-BAY-03`).
-4. Notice the status shows **NONE**. 
-5. Even though R. Sharma is an `ENGINEER`, clicking **View Spec** is blocked because no explicit grant has been made on the smart contract.
-
-### Step 4: Request Access on Blockchain
-1. As **👤 R. Sharma**, click **⛓ Request Access** on `RADAR-BAY-03`.
-2. Confirm the transaction. Status updates to **REQUESTED**.
-
-### Step 5: Admin Grants Access
-1. Switch active persona back to **🛡 Admin**.
-2. Under **Access Control**, see the **🔔 Pending Access Requests** queue.
-3. Click **✓ Grant** on R. Sharma's request.
-4. An on-chain `grantAccess(did, "RADAR-BAY-03")` transaction executes.
-
-### Step 6: Verify Access & Cryptographic Document Integrity
-1. Switch back to **👤 R. Sharma**.
-2. Status is now **GRANTED**.
-3. Click **🔓 View Spec**.
-4. The protected technical specification is decrypted/retrieved, and the SHA-256 hash is verified against the on-chain anchor:
-   - Status: `✓ CRYPTOGRAPHICALLY VERIFIED - NO TAMPERING DETECTED`
-5. Click **🔎 Verify Integrity** to independently recalculate the SHA-256 hash and verify with the contract.
-
-### Step 7: Revoke Access
-1. Switch to **🛡 Admin**.
-2. Click **Revoke** for R. Sharma on `RADAR-BAY-03`.
-3. Switch back to **👤 R. Sharma** — access is immediately blocked on-chain.
-
-### Step 8: Tokenized Digital Asset Custody Transfer
-1. Switch to **🛡 Admin** and navigate to the **⚙️ Digital Assets** tab.
-2. Select **Radar Unit RU-204 (Asset #1)**.
-3. In the transfer box, enter A. Verma's DID (`did:bel:0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc`).
-4. Click **⛓ Transfer On-Chain**.
-5. Observe the **Custody Chain-of-Title (On-Chain History)** timeline update in real-time, showing the transfer event anchored on-chain.
-
-### Step 9: Verify Immutable Audit Trail & Clickable Tx Hashes
-1. Navigate to the **📋 Audit Trail** tab.
-2. View all indexed events: `IdentityRegistered`, `RoleAssigned`, `AccessRequested`, `AccessGranted`, `AccessRevoked`, `AssetTransferred`.
-3. Click any **⛓ Tx Hash** badge to open the **Verify On-Chain Transaction** modal, showing raw JSON-RPC block numbers, gas used, and cryptographic event logs.
-
-### Step 10: Rebuild Audit Index from Blockchain Events
-1. As **🛡 Admin** on the Audit tab, click **⛓ Rebuild Index From Chain**.
-2. The SQLite index is completely erased and reconstructed solely by reading event logs from Block #0 to the latest block.
-3. A success banner displays the number of reconstructed events and block span.
+| Layer | Technologies Used |
+| :--- | :--- |
+| **Frontend UI** | React 19, Vite, Tailwind-free Vanilla CSS (Dark Navy & Steel Theme), Lucide Icons |
+| **Frontend Hosting** | Vercel Edge CDN |
+| **Backend API** | Node.js, Express 4, Ethers.js v6, CORS, Dotenv |
+| **Backend Hosting** | Render Web Services (Node.js runtime) |
+| **Cloud Database** | Turso (libSQL Serverless SQLite engine) |
+| **Blockchain** | Polygon Amoy Testnet (Chain ID `80002`, EVM Cancun) |
+| **Smart Contracts** | Solidity `^0.8.24`, OpenZeppelin Contracts v5 (ERC-721, Ownable) |
+| **Development & Testing** | Hardhat, Mocha, Chai, Hardhat Ethers |
 
 ---
 
-## Smart Contracts Overview
+## Demo Personas & Presentation Flow
 
-All smart contracts are located in `contracts/` and written in Solidity `^0.8.24` targeting EVM `cancun`:
+The platform includes 3 pre-configured demo personas switchable in the top navigation bar:
+
+| Persona | Name | Role | Department | Role in Demo |
+| :--- | :--- | :--- | :--- | :--- |
+| **🛡️ ADMIN** | Admin (Security Officer) | `ADMIN` | Cyber Security & Directorate | Approves access requests, registers identities, mints assets, triggers audit rebuilds. |
+| **👤 SHARMA** | R. Sharma | `ENGINEER` | Radar & Phased Array Systems | Proves **Role ≠ Access**: engineer is blocked until Admin approves request on-chain. |
+| **🔧 VERMA** | A. Verma | `TECHNICIAN` | Electronics Fabrication & Maintenance | Custody recipient for hardware asset transfers. |
+
+### 5-Minute Presentation Flow:
+1. **Login as Admin:** Inspect the on-chain identity registry and deployed smart contract parameters.
+2. **Register Employee:** Register `R. Sharma` with role `ENGINEER`. Observe the on-chain confirmation toast.
+3. **Switch to Sharma (Gate Test):** Navigate to **Access Control** > select `RADAR-BAY-03`. Notice access is **BLOCKED** despite having the `ENGINEER` role.
+4. **Request Access:** Click **Request Access** as Sharma (creates on-chain request event).
+5. **Switch to Admin & Grant:** Admin opens pending requests queue and clicks **Grant Access** (executes on-chain grant).
+6. **Verify Access & Tamper-Check:** Switch back to Sharma > click **View Spec** > view decrypted technical specification with `✓ CRYPTOGRAPHICALLY VERIFIED - NO TAMPERING DETECTED`.
+7. **Transfer Asset Custody:** Switch to Admin > transfer `Radar Unit RU-204` to `A. Verma` > inspect the on-chain chain-of-title timeline.
+8. **Inspect Audit Trail:** Open **Audit Trail** > click a transaction hash to view on-chain block receipt on Polygonscan > click **Rebuild Index from Chain** to demonstrate 100% blockchain data reconstructibility.
+
+---
+
+## Smart Contracts Architecture
+
+All contracts are located in [`contracts/`](file:///e:/sih/contracts) and compiled using Hardhat:
 
 1. **`IdentityRegistry.sol`**
-   - Maps personnel DIDs (`did:bel:0x...`) to wallet addresses and organizational roles.
-   - Enforces uniqueness and emits `IdentityRegistered` and `RoleAssigned` events.
+   - Stores mapping from DID strings to user addresses, roles, registration timestamps, and authorized registering authority.
+   - Prevents duplicate DID or wallet registrations.
+   - Emits `IdentityRegistered` and `RoleAssigned`.
 
 2. **`AccessControlManager.sol`**
-   - Resource registry holding sensitivity classifications and SHA-256 document hash anchors.
-   - Per-resource explicit permissions table: `hasAccess(did, resourceId)`.
-   - Access request workflow: `requestAccess()`, `grantAccess()`, `revokeAccess()`.
+   - Stores resource metadata, sensitivity level, and document SHA-256 cryptographic hash.
+   - Maintains explicit per-resource access tables: `hasAccess(did, resourceId)`.
+   - Manages state machine: `NONE` ➔ `REQUESTED` ➔ `GRANTED` ➔ `REVOKED`.
    - Emits `ResourceCreated`, `AccessRequested`, `AccessGranted`, `AccessRevoked`.
 
-3. **`AssetRegistry.sol` (OpenZeppelin ERC-721)**
-   - Inherits OpenZeppelin `ERC721URIStorage` and `Ownable`.
-   - Mints unique tokenized defense hardware units with off-chain schematic hash anchors.
-   - Tracks linear custody history (`getAssetHistory(tokenId)`).
-   - Emits `AssetMinted`, `AssetTransferred`, `AssetRetired`.
+3. **`AssetRegistry.sol` (ERC-721)**
+   - Extends OpenZeppelin `ERC721URIStorage` and `Ownable`.
+   - Mints defense asset NFTs with off-chain schematic hash anchors.
+   - Implements linear custody chain-of-title (`getAssetHistory(tokenId)`).
+   - Supports dual-signature high-assurance security transfers and service history logs.
 
 ---
 
 ## Cryptographic Document & Integrity Flow
 
-1. **Off-Chain Storage:** Confidential files are stored in `backend/storage/documents/`.
-2. **Hash Computation:** When an Admin creates a resource or mints an asset, `backend/utils/hasher.js` computes the SHA-256 digest (`crypto.createHash('sha256')`).
-3. **On-Chain Anchor:** The SHA-256 hash is passed to `createResource()` or `mintAsset()` and stored in contract state.
-4. **Integrity Check:** When a user accesses content, the backend re-computes the file's SHA-256 hash and compares it bit-for-bit against the on-chain anchor. If any file has been modified off-chain, the platform flags a tamper violation.
-
----
-
-## Rebuilding Audit Index from Blockchain Events
-
-The SQLite database (`backend/bel_platform.db`) serves as an accelerated read-cache. The single source of truth is always the blockchain:
-
-- Endpoint: `POST /api/audit/rebuild`
-- Function: `backend/indexer.js -> rebuildIndexFromChain()`
-- Logic:
-  1. Clears `audit_index` table.
-  2. Queries all historic logs from `IdentityRegistry`, `AccessControlManager`, and `AssetRegistry` from block 0.
-  3. Parses event args, fetches block timestamps, and repopulates the SQLite index.
-
----
-
-## Resetting the Demo Environment
-
-To return the prototype to a clean initial demo state:
-
-```bash
-npm run reset-demo
+```
++---------------------+       SHA-256        +-----------------------+
+|  Confidential Spec  | -------------------> | 64-character Hex Hash |
+|  (Off-Chain File)   |                      +-----------┬-----------+
++---------------------+                                  │
+                                                         ▼
+                                             +-----------------------+
+                                             | Polygon Amoy Contract |
+                                             |  (Immutable Anchor)   |
+                                             +-----------┬-----------+
+                                                         │
+   User Access Verification:                             │
+   Calculated File Hash <================================+ Comparison (Bit-for-Bit)
+   [ MATCH: Verified Authentic | MISMATCH: Tamper Alert ]
 ```
 
-This single command:
-1. Redeploys fresh contracts to the local node.
-2. Clears and resets SQLite database tables.
-3. Anchors mock document SHA-256 hashes.
-4. Re-seeds Admin and initial resources/assets.
-5. Rebuilds the event audit index from block 0.
+1. **Off-Chain Storage:** Technical specifications remain in secure storage (`backend/storage/documents/`).
+2. **Hash Computation:** SHA-256 digest is generated using Node.js crypto utilities.
+3. **On-Chain Anchor:** Hash is passed during `createResource()` and locked into smart contract storage.
+4. **Verification:** When accessed, the system recomputes the SHA-256 hash and verifies against the contract.
 
 ---
 
-## Troubleshooting & FAQs
+## Local Development & Testing
 
-### 1. `Cannot connect to Hardhat node (ECONNREFUSED 127.0.0.1:8545)`
-- Make sure you started `npm run chain` in a separate terminal before running `npm run setup` or `npm run backend`.
+### Prerequisites
+- Node.js `v18.0.0+`
+- npm `v9.0.0+`
+- Git
 
-### 2. `Contracts configuration not found (contracts.json)`
-- Run `npm run reset-demo` to deploy the contracts and generate `backend/config/contracts.json` and `frontend/src/contracts.json`.
+### 1. Installation
+```bash
+git clone https://github.com/harshab054/BEL-Blockchain-Secure-Platform.git
+cd BEL-Blockchain-Secure-Platform
+npm install
+npm run setup
+```
 
-### 3. `Port 5001 or 5173 already in use`
-- Ensure no older instances of node are running in the background. On Windows PowerShell:
-  ```powershell
-  Get-Process node | Stop-Process -Force
-  ```
-
-### 4. Running Unit Tests
-To run the Hardhat contract test suite:
+### 2. Run All Automated Unit Tests
 ```bash
 npm test
 ```
+*Executes all 11 Hardhat smart contract test suites covering identity, ABAC lifecycle, and ERC-721 custody.*
+
+### 3. Run Locally (Full Stack with Local Blockchain)
+```bash
+npm run dev
+```
+- Local Hardhat Node: `http://127.0.0.1:8545`
+- Backend API: `http://localhost:5001`
+- Frontend UI: `http://localhost:5173`
 
 ---
 
-## Prototype Security Notice & Limitations
+## Production Cloud Deployment
 
-- **Local Prototype Keys:** The private keys included in `.env.example` are standard, deterministic Hardhat local development accounts. They are intended strictly for local offline demonstrations and testing.
-- **Off-Chain Files:** In this prototype, mock documents are stored in local filesystem storage (`backend/storage/documents/`). In an enterprise deployment, this would interface with a classified IPFS cluster or secure on-prem object store.
-- **Gas & Network:** The system is configured for Hardhat Local (Chain ID `31337`).
+### Backend on Render
+- **Repository:** `harshab054/BEL-Blockchain-Secure-Platform`
+- **Root Directory:** `backend`
+- **Build Command:** `npm install`
+- **Start Command:** `npm start`
+- **Environment Variables Required:**
+  - `NODE_ENV=production`
+  - `PORT=5001`
+  - `RPC_URL=https://polygon-amoy-bor-rpc.publicnode.com`
+  - `CHAIN_ID=80002`
+  - `BLOCKCHAIN_NETWORK_NAME=Polygon Amoy Testnet (ChainID: 80002)`
+  - `TURSO_DATABASE_URL=libsql://your-database.turso.io`
+  - `TURSO_AUTH_TOKEN=your-turso-token`
+  - `ADMIN_ADDRESS=0x...`
+  - `ADMIN_PRIVATE_KEY=0x...`
+  - `CORS_ORIGIN=*`
+
+### Frontend on Vercel
+- **Repository:** `harshab054/BEL-Blockchain-Secure-Platform`
+- **Root Directory:** `frontend`
+- **Framework Preset:** `Vite`
+- **Build Command:** `npm run build`
+- **Output Directory:** `dist`
+- **Environment Variables Required:**
+  - `VITE_API_URL=https://your-render-backend-url.onrender.com`
 
 ---
 
-## Team & Presentation Checklist
+## Security & Environment Hygiene
 
-- [x] Node.js 18+ verified
-- [x] Hardhat node running on `127.0.0.1:8545`
-- [x] `npm run reset-demo` executed cleanly
-- [x] Backend running on `http://localhost:5001` (`/api/status` returns operational)
-- [x] Frontend running on `http://localhost:5173`
-- [x] All 3 personas verified
-- [x] Document SHA-256 integrity verified
-- [x] Rebuild index from blockchain verified
+- **Public Testnet Notice:** Polygon Amoy is a testnet for demonstration and evaluation. No real funds or mainnet assets are used.
+- **Zero-Secret Commits:** All secrets (`.env`, `backend/.env`, private keys, Turso tokens) are excluded via [`.gitignore`](file:///e:/sih/.gitignore).
+- **Client-Safe Bundles:** The frontend bundle contains zero private keys or server tokens; all blockchain transactions in the demo environment are signed securely via backend persona wallets.
+
+---
+
+## Known Limitations & Future Roadmap (SIH Context)
+
+1. **Storage Scaling:** Production enterprise deployment would replace local document storage with an air-gapped IPFS / InterPlanetary File System cluster or private MinIO S3 object store.
+2. **Hardware Security Modules (HSM):** Integration of FIPS 140-2 Level 3 HSM / Smart Card hardware tokens for personnel key management.
+3. **Zero-Knowledge Proofs (ZKP):** Implementing zk-SNARKs for privacy-preserving attribute verification without exposing employee department or clearance level on-chain.
+4. **Multi-Signature Approvals:** Expanding high-assurance asset transfers to require $M$-of-$N$ multi-sig approval from both Base Commander and Directorate Security Officers.
+
+---
+
+## License & Attribution
+
+Developed for **Smart India Hackathon (SIH)** — **Bharat Electronics Limited (BEL)** Problem Statement.
+All rights reserved © Bharat Electronics Limited / SIH Project Team.

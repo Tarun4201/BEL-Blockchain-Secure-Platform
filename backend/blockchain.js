@@ -14,27 +14,73 @@ function configuredValue(name, localFallback) {
   return value || localFallback;
 }
 
-const RPC_URL = configuredValue("RPC_URL", "http://127.0.0.1:8545");
-const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, { polling: true, pollingInterval: 2000 });
-provider.on("error", () => {
-  // Gracefully ignore transient filter resets during hardhat redeployments
-});
-
-// Load deployed contracts configuration
+// Load deployed contracts configuration with optional environment variable overrides
 const contractsConfigPath = path.join(__dirname, "config", "contracts.json");
 
-function loadContractsConfig() {
-  if (!fs.existsSync(contractsConfigPath)) {
-    throw new Error(
-      `Contracts configuration not found at ${contractsConfigPath}. Please run the deployment script first.`
-    );
+function getSavedNetworkConfig() {
+  if (fs.existsSync(contractsConfigPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(contractsConfigPath, "utf8"));
+    } catch (e) {
+      return {};
+    }
   }
-  const config = JSON.parse(fs.readFileSync(contractsConfigPath, "utf8"));
+  return {};
+}
+
+const savedConfig = getSavedNetworkConfig();
+const DEFAULT_AMOY_RPC = "https://polygon-amoy-bor-rpc.publicnode.com";
+
+const RPC_URL =
+  process.env.RPC_URL ||
+  process.env.AMOY_RPC_URL ||
+  process.env.POLYGON_AMOY_RPC_URL ||
+  process.env.POLYGON_RPC_URL ||
+  (process.env.NODE_ENV === "production" ||
+  process.env.CHAIN_ID === "80002" ||
+  savedConfig.chainId === 80002 ||
+  savedConfig.network === "amoy"
+    ? DEFAULT_AMOY_RPC
+    : "http://127.0.0.1:8545");
+
+const POLLING_INTERVAL = parseInt(process.env.RPC_POLLING_INTERVAL || "3000", 10);
+const provider = new ethers.JsonRpcProvider(RPC_URL, undefined, {
+  polling: true,
+  pollingInterval: POLLING_INTERVAL,
+});
+console.log("✓ Connected to Blockchain RPC Provider:", RPC_URL);
+
+provider.on("error", (err) => {
+  console.warn("[RPC Provider Notice]:", err.message || err);
+});
+
+function loadContractsConfig() {
+  let config = { contracts: {} };
+  if (fs.existsSync(contractsConfigPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(contractsConfigPath, "utf8"));
+    } catch (e) {
+      console.warn("Could not parse contracts.json:", e.message);
+    }
+  }
+
   if (IS_PRODUCTION && Number(config.chainId) === 31337) {
     throw new Error(
       "Production cannot use the local Hardhat deployment configuration. Deploy the contracts to the selected public test network first."
     );
   }
+
+  // Allow environment variables to override contract addresses
+  if (process.env.IDENTITY_REGISTRY_ADDRESS && config.contracts.IdentityRegistry) {
+    config.contracts.IdentityRegistry.address = process.env.IDENTITY_REGISTRY_ADDRESS;
+  }
+  if (process.env.ACCESS_CONTROL_ADDRESS && config.contracts.AccessControlManager) {
+    config.contracts.AccessControlManager.address = process.env.ACCESS_CONTROL_ADDRESS;
+  }
+  if (process.env.ASSET_REGISTRY_ADDRESS && config.contracts.AssetRegistry) {
+    config.contracts.AssetRegistry.address = process.env.ASSET_REGISTRY_ADDRESS;
+  }
+
   return config;
 }
 

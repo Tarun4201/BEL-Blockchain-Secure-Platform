@@ -1,11 +1,12 @@
 {
-  "network": "localhost",
-  "chainId": 31337,
-  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  "deployedAt": "2026-09-30T04:00:31.991Z",
+  "network": "amoy",
+  "chainId": 80002,
+  "deployer": "0x73601c968d0A072a5Cc4C17852Da8c26BDac53CA",
+  "deployedAt": "2026-09-28T14:20:07.725Z",
   "contracts": {
     "IdentityRegistry": {
-      "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "address": "0xC928127C89339269645217cC7aAB8c604Fa717f3",
+      "txHash": "0x4e8fd15fea7972d81c0d5b02e6da42ac306d5ac091736cf93dfa04a1709ca87b",
       "abi": [
         {
           "inputs": [],
@@ -292,7 +293,8 @@
       ]
     },
     "AccessControlManager": {
-      "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      "address": "0x2FFD26016cb9F1638f86d03Fb118B90288B8bf64",
+      "txHash": "0x136f15199cfcb9ada35859f7e0d30a44e3786d6c7930b04ca79d3360ef046fa1",
       "abi": [
         {
           "inputs": [
@@ -330,12 +332,6 @@
               "indexed": false,
               "internalType": "uint256",
               "name": "timestamp",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "validUntil",
               "type": "uint256"
             }
           ],
@@ -543,11 +539,6 @@
               "internalType": "uint256",
               "name": "updatedAt",
               "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "validUntil",
-              "type": "uint256"
             }
           ],
           "stateMutability": "view",
@@ -582,11 +573,6 @@
                 {
                   "internalType": "uint256",
                   "name": "updatedAt",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "validUntil",
                   "type": "uint256"
                 }
               ],
@@ -673,11 +659,6 @@
                   "internalType": "uint256",
                   "name": "updatedAt",
                   "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "validUntil",
-                  "type": "uint256"
                 }
               ],
               "internalType": "struct AccessControlManager.AccessRecord[]",
@@ -754,29 +735,6 @@
             }
           ],
           "name": "grantAccess",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "string",
-              "name": "did",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "resourceId",
-              "type": "string"
-            },
-            {
-              "internalType": "uint256",
-              "name": "validUntil",
-              "type": "uint256"
-            }
-          ],
-          "name": "grantAccessUntil",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -904,7 +862,8 @@
       ]
     },
     "AssetRegistry": {
-      "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+      "address": "0xb2A2D16CbE6B56c278341d40ee70f1F723Bfe62f",
+      "txHash": "0xcc06e7db77d129933ed87d13ce3b23048b27b4ab687bc0ee41d81b95129785cd",
       "abi": [
         {
           "inputs": [
