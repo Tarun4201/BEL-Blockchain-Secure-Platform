@@ -296,13 +296,21 @@ function SidebarNavigation({ modules, activeModule, onNavigate }) {
 
 export function ErpPortal() {
   const [bootstrap, setBootstrap] = useState(null); const [session, setSession] = useState(null); const [dashboard, setDashboard] = useState(null); const [activeModule, setActiveModule] = useState('dashboard'); const [records, setRecords] = useState([]); const [loadingRecords, setLoadingRecords] = useState(false); const [error, setError] = useState('');
-  useEffect(() => { erpApi.bootstrap().then(setBootstrap).catch((err) => setError(err.message)); }, []);
+  const loadBootstrap = useCallback(async () => {
+    setError('');
+    try {
+      setBootstrap(await erpApi.bootstrap());
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+  useEffect(() => { loadBootstrap(); }, [loadBootstrap]);
   const loadDashboard = async (token, departmentId) => { const data = await erpApi.dashboard(token, departmentId); setDashboard(data); return data; };
   const signIn = async (credentials) => { const result = await erpApi.login(credentials); const next = { token: result.sessionToken, user: { ...result.user, workspaces: result.workspaces }, workspace: result.activeWorkspace, modules: result.modules }; window.sessionStorage.setItem('bel-trustgrid-session', result.sessionToken); setSession(next); setActiveModule('dashboard'); await loadDashboard(result.sessionToken, result.activeWorkspace.departmentId); };
   const updateWallet = useCallback((verified) => { setSession((current) => current ? { ...current, user: { ...current.user, walletConnected: Boolean(verified.walletConnected), walletLabel: verified.walletLabel } } : current); }, []);
   const loadRecords = useCallback(async (module) => { setActiveModule(module); if (['dashboard', 'identity', 'users', 'digital-assets', 'asset-passport-common', 'access-requests', 'permissions', 'temporary-access', 'verification', 'audit-common', 'blockchain-activity', 'security-insights', 'architecture-common', 'access-control', 'asset-passport', 'identity-assertion', 'security-signals', 'demo-simulator', 'audit', 'organization', 'blockchain', 'architecture', 'profile', 'settings'].includes(module)) return; setLoadingRecords(true); try { const data = await erpApi.records(session.token, module, session.workspace.departmentId); setRecords(data.records); } catch (err) { setError(err.message); setRecords([]); } finally { setLoadingRecords(false); } }, [session]);
   const logout = async () => { try { await erpApi.logout(session.token); } catch {} window.sessionStorage.removeItem('bel-trustgrid-session'); setSession(null); setDashboard(null); setActiveModule('dashboard'); };
-  if (error && !bootstrap) return <main className="erp-loading">Unable to start BEL TrustGrid: {error}</main>;
+  if (error && !bootstrap) return <main className="erp-loading"><div><p>Unable to start BEL TrustGrid: {error}</p><button className="erp-primary" type="button" onClick={loadBootstrap}>Retry connection</button></div></main>;
   if (!bootstrap) return <main className="erp-loading">Loading protected demonstration data…</main>;
   if (!session || !dashboard) return <Login bootstrap={bootstrap} onLogin={signIn} />;
   const user = session.user;

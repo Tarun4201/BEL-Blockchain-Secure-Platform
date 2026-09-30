@@ -6,6 +6,31 @@ const BASE = rawBase
   ? (rawBase.endsWith('/api') ? rawBase.replace(/\/+$/, '') : `${rawBase.replace(/\/+$/, '')}/api`)
   : '/api';
 
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+const TRANSIENT_RETRY_DELAYS = [1000, 2000, 4000, 8000, 12000, 16000];
+const pause = (duration) => new Promise((resolve) => window.setTimeout(resolve, duration));
+
+async function fetchErp(path, options) {
+  // Render may return an HTML gateway response while a free instance is waking.
+  // Retrying read-only requests across the full cold-start window keeps that
+  // temporary condition from becoming a stuck login screen. Mutating requests
+  // are deliberately not retried, so a user action is never duplicated.
+  const retryDelays = options.method === 'GET' ? TRANSIENT_RETRY_DELAYS : [];
+  let response;
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+    try {
+      response = await fetch(`${BASE}/erp${path}`, options);
+    } catch (error) {
+      if (attempt === retryDelays.length) throw error;
+      await pause(retryDelays[attempt]);
+      continue;
+    }
+    if (!TRANSIENT_STATUSES.has(response.status) || attempt === retryDelays.length) return response;
+    await pause(retryDelays[attempt]);
+  }
+  return response;
+}
+
 
 async function req(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -66,13 +91,22 @@ export const api = {
 async function erpReq(path, { method = 'GET', body, sessionToken } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (sessionToken) headers['x-erp-session'] = sessionToken;
-  const res = await fetch(`${BASE}/erp${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  let res;
+  try {
+    res = await fetchErp(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  } catch {
+    throw new Error('TrustGrid could not reach the service. Check your connection and retry.');
+  }
   if (res.status === 204) return null;
   const responseText = await res.text();
   let data = null;
   try { data = responseText ? JSON.parse(responseText) : null; }
   catch {
-    const action = path.startsWith('/wallet/') ? 'The active backend does not include the MetaMask verification service. Restart the full local development stack and sign in again.' : 'The local API returned an unexpected response. Restart the local development stack and try again.';
+    const action = path.startsWith('/wallet/')
+      ? 'The active backend does not include the MetaMask verification service. Refresh the portal and try again.'
+      : TRANSIENT_STATUSES.has(res.status)
+        ? 'TrustGrid is starting or temporarily unavailable. Please wait a moment and retry.'
+        : 'TrustGrid received an invalid service response. Please retry.';
     throw new Error(action);
   }
   if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
