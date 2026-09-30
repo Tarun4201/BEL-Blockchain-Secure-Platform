@@ -13,7 +13,7 @@ function updateEnvFile(filePath, address, privateKey) {
   }
 
   let content = fs.readFileSync(filePath, "utf8");
-  
+
   // Format private key with 0x prefix if missing
   const formattedKey = privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`;
   const formattedAddress = ethers.getAddress(address);
@@ -40,7 +40,7 @@ async function verifyAndSave(addressInput, keyInput) {
   try {
     const rawKey = keyInput.trim();
     const formattedKey = rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`;
-    
+
     // Verify wallet derivation
     const wallet = new ethers.Wallet(formattedKey);
     const derivedAddress = wallet.address;

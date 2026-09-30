@@ -64,7 +64,14 @@ async function erpReq(path, { method = 'GET', body, sessionToken } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (sessionToken) headers['x-erp-session'] = sessionToken;
   const res = await fetch(`${BASE}/erp${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
-  const data = res.status === 204 ? null : await res.json();
+  if (res.status === 204) return null;
+  const responseText = await res.text();
+  let data = null;
+  try { data = responseText ? JSON.parse(responseText) : null; }
+  catch {
+    const action = path.startsWith('/wallet/') ? 'The active backend does not include the MetaMask verification service. Restart the full local development stack and sign in again.' : 'The local API returned an unexpected response. Restart the local development stack and try again.';
+    throw new Error(action);
+  }
   if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
   return data;
 }
@@ -74,12 +81,16 @@ export const erpApi = {
   login: (data) => erpReq('/login', { method: 'POST', body: data }),
   logout: (sessionToken) => erpReq('/logout', { method: 'POST', sessionToken }),
   dashboard: (sessionToken, departmentId) => erpReq(`/dashboard?departmentId=${encodeURIComponent(departmentId || '')}`, { sessionToken }),
+  walletChallenge: (sessionToken) => erpReq('/wallet/challenge', { method: 'POST', sessionToken }),
+  verifyWallet: (sessionToken, signature) => erpReq('/wallet/verify', { method: 'POST', body: { signature }, sessionToken }),
   records: (sessionToken, module, departmentId) => erpReq(`/records/${encodeURIComponent(module)}?departmentId=${encodeURIComponent(departmentId || '')}`, { sessionToken }),
   accessRequests: (sessionToken) => erpReq('/access-requests', { sessionToken }),
   createAccessRequest: (sessionToken, data) => erpReq('/access-requests', { method: 'POST', body: data, sessionToken }),
   decideAccessRequest: (sessionToken, requestId, decision, approvalNote = '') => erpReq(`/access-requests/${encodeURIComponent(requestId)}/${decision}`, { method: 'POST', body: { approvalNote }, sessionToken }),
   audit: (sessionToken) => erpReq('/audit', { sessionToken }),
   blockchainOverview: (sessionToken) => erpReq('/blockchain/overview', { sessionToken }),
+  grantBlockchainAccess: (sessionToken, data) => erpReq('/blockchain/access-grants', { method: 'POST', body: data, sessionToken }),
+  revokeBlockchainAccess: (sessionToken, data) => erpReq('/blockchain/access-revocations', { method: 'POST', body: data, sessionToken }),
   assetPassports: (sessionToken) => erpReq('/asset-passports', { sessionToken }),
   assetPassport: (sessionToken, assetId) => erpReq(`/asset-passports/${encodeURIComponent(assetId)}`, { sessionToken }),
   verifyAssetPassport: (sessionToken, assetId) => erpReq(`/asset-passports/${encodeURIComponent(assetId)}/verify`, { method: 'POST', sessionToken }),

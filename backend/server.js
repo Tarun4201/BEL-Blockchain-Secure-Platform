@@ -16,6 +16,7 @@ const erpRouter = require("./routes/erp");
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+const FRONTEND_DIST = path.join(__dirname, "..", "frontend", "dist");
 
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
@@ -86,11 +87,14 @@ app.get("/api/status", async (req, res) => {
       get("SELECT COUNT(*) as count FROM resources_meta"),
       get("SELECT COUNT(*) as count FROM assets_meta"),
     ]);
+    const deployment = (() => {
+      try { return loadContractsConfig(); } catch { return null; }
+    })();
     res.json({
       status: "operational",
       isNodeConnected,
       currentBlockNumber: blockNumber,
-      network: networkName,
+      network: deployment?.network ? `${deployment.network} (Chain ID: ${deployment.chainId})` : networkName,
       counts: {
         identities: ids?.count || 0,
         resources: res_?.count || 0,
@@ -103,6 +107,17 @@ app.get("/api/status", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// In production, Express serves the already-built React application. Vite still
+// serves the frontend locally, so hot reload and the existing dev workflow stay
+// unchanged.
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(FRONTEND_DIST));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) return next();
+    return res.sendFile(path.join(FRONTEND_DIST, "index.html"));
+  });
+}
+
 
 async function startServer() {
   try {
@@ -113,6 +128,13 @@ async function startServer() {
 
     // 1. Initialize SQLite database tables
     await initDb();
+
+    if (process.env.NODE_ENV === "production") {
+      if (!require("fs").existsSync(FRONTEND_DIST)) {
+        throw new Error("Frontend build is missing. Run `npm run build --prefix frontend` before starting production.");
+      }
+      await require("./blockchain").validateProductionConfiguration();
+    }
 
     // 2. Start Express server
     app.listen(PORT, () => {

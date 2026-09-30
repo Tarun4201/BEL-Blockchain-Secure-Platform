@@ -1,0 +1,4 @@
+/* Keep the secure verification steps readable while preserving the login context behind them. */
+.login-verification-overlay{background:rgba(3,22,46,.58);backdrop-filter:blur(2px)}
+.login-verification-card{box-shadow:0 26px 70px rgba(1,14,32,.42)}
+.login-verification-steps li{transition-duration:.32s}

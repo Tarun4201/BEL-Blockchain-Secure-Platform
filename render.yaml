@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: bel-trustgrid
+    runtime: node
+    buildCommand: npm ci && npm --prefix backend ci && npm --prefix frontend ci && npm run build --prefix frontend
+    startCommand: node backend/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BEL_DB_PATH
+        value: /var/data/bel_platform.db
+      - key: RPC_URL
+        sync: false
+      - key: ADMIN_PRIVATE_KEY
+        sync: false
+      - key: SHARMA_PRIVATE_KEY
+        sync: false
+      - key: VERMA_PRIVATE_KEY
+        sync: false
+    disk:
+      name: bel-trustgrid-data
+      mountPath: /var/data

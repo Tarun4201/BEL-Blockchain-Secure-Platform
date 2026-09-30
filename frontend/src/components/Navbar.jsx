@@ -13,7 +13,7 @@ export function Navbar({ activePersona, chainStatus, onSignOut, currentPage }) {
         <div className="chain-status">
           <div className={`chain-dot ${isOnline ? '' : 'offline'}`} />
           <span>{isOnline ? `Block #${chainStatus.currentBlockNumber}` : 'Node Offline'}</span>
-          <span style={{ color: 'var(--text-muted)' }}>· Hardhat Local</span>
+          <span style={{ color: 'var(--text-muted)' }}>· {chainStatus?.network || 'Blockchain unavailable'}</span>
         </div>
         <div className="signed-in-user">
           <span>{activePersona?.name || 'Secure session'}</span>

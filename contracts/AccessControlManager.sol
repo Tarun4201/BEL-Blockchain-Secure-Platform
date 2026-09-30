@@ -34,6 +34,9 @@ contract AccessControlManager {
         AccessStatus status;
         address updatedBy;
         uint256 updatedAt;
+        // A zero value means a legacy unrestricted grant. New portal grants
+        // always use a deadline so the contract can enforce least privilege.
+        uint256 validUntil;
     }
 
     // Mapping from resourceId to Resource
@@ -67,7 +70,8 @@ contract AccessControlManager {
         string indexed did,
         string indexed resourceId,
         address indexed grantedBy,
-        uint256 timestamp
+        uint256 timestamp,
+        uint256 validUntil
     );
 
     event AccessRevoked(
@@ -150,6 +154,7 @@ contract AccessControlManager {
         record.status = AccessStatus.REQUESTED;
         record.updatedBy = msg.sender;
         record.updatedAt = block.timestamp;
+        record.validUntil = 0;
 
         emit AccessRequested(did, resourceId, msg.sender, block.timestamp);
     }
@@ -158,6 +163,27 @@ contract AccessControlManager {
      * @notice Admin grants access to a requested or registered DID for a resource.
      */
     function grantAccess(string calldata did, string calldata resourceId) external onlyAdmin {
+        _grantAccess(did, resourceId, 0);
+    }
+
+    /**
+     * @notice Grant explicit, time-bound access. The grant becomes ineffective
+     * automatically after validUntil without an off-chain cleanup job.
+     */
+    function grantAccessUntil(
+        string calldata did,
+        string calldata resourceId,
+        uint256 validUntil
+    ) external onlyAdmin {
+        require(validUntil > block.timestamp, "AccessControlManager: expiry must be in the future");
+        _grantAccess(did, resourceId, validUntil);
+    }
+
+    function _grantAccess(
+        string memory did,
+        string memory resourceId,
+        uint256 validUntil
+    ) internal {
         require(bytes(did).length > 0, "AccessControlManager: empty DID");
         require(_resources[resourceId].exists, "AccessControlManager: resource does not exist");
         require(identityRegistry.isRegistered(did), "AccessControlManager: DID is not registered");
@@ -174,8 +200,9 @@ contract AccessControlManager {
         record.status = AccessStatus.GRANTED;
         record.updatedBy = msg.sender;
         record.updatedAt = block.timestamp;
+        record.validUntil = validUntil;
 
-        emit AccessGranted(did, resourceId, msg.sender, block.timestamp);
+        emit AccessGranted(did, resourceId, msg.sender, block.timestamp, validUntil);
     }
 
     /**
@@ -221,7 +248,13 @@ contract AccessControlManager {
      */
     function hasAccess(string calldata did, string calldata resourceId) external view returns (bool) {
         bytes32 key = _getKey(did, resourceId);
-        if (_accessRecords[key].status == AccessStatus.GRANTED) return true;
+        AccessRecord storage record = _accessRecords[key];
+        if (record.status == AccessStatus.GRANTED) {
+            return record.validUntil == 0 || block.timestamp <= record.validUntil;
+        }
+        // A revocation is an explicit deny and must take precedence over a
+        // role policy that might otherwise allow this identity.
+        if (record.status == AccessStatus.REVOKED) return false;
         if (!_resources[resourceId].exists || !identityRegistry.isRegistered(did)) return false;
         (, , string memory role, , ) = identityRegistry.getIdentity(did);
         return _rolePermissions[resourceId][role];
@@ -255,12 +288,13 @@ contract AccessControlManager {
         returns (
             AccessStatus status,
             address updatedBy,
-            uint256 updatedAt
+            uint256 updatedAt,
+            uint256 validUntil
         )
     {
         bytes32 key = _getKey(did, resourceId);
         AccessRecord storage rec = _accessRecords[key];
-        return (rec.status, rec.updatedBy, rec.updatedAt);
+        return (rec.status, rec.updatedBy, rec.updatedAt, rec.validUntil);
     }
 
     /**

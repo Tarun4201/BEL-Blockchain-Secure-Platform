@@ -1,7 +1,36 @@
 const express = require("express");
 const router = express.Router();
 const { getContract, resolveSigner, personas, provider, getLatestNonce } = require("../blockchain");
-const { all } = require("../db");
+const { all, get } = require("../db");
+
+const ACCESS_POLICY = Object.freeze({
+  RESTRICTED: { maxHours: 168, defaultHours: 24, label: "Standard controlled access" },
+  CONFIDENTIAL: { maxHours: 72, defaultHours: 12, label: "Short-duration controlled access" },
+  SECRET: { maxHours: 24, defaultHours: 8, label: "High-sensitivity time-bound access" },
+  TOP_SECRET: { maxHours: 4, defaultHours: 1, label: "Mission-critical minimum-duration access" },
+});
+
+function policyFor(sensitivityLabel) {
+  return ACCESS_POLICY[String(sensitivityLabel || "RESTRICTED").toUpperCase()] || ACCESS_POLICY.RESTRICTED;
+}
+
+function trustReceipt({ action, did, resourceId, sensitivityLabel, blockNumber, validUntil = 0, decision }) {
+  return {
+    receiptId: `BEL-TR-${String(blockNumber || "LOCAL")}-${Date.now().toString(36).toUpperCase()}`,
+    action,
+    decision,
+    subject: "Verified identity",
+    protectedResource: resourceId,
+    sensitivityLabel,
+    expiresAt: validUntil || null,
+    blockNumber: blockNumber || null,
+    evidence: blockNumber ? "Smart-contract transaction confirmed" : "Smart-contract policy check confirmed",
+    explanation: validUntil
+      ? "Access is active only until the stated deadline. The contract denies it automatically after expiry."
+      : "The current policy decision was evaluated directly by the smart contract.",
+    didSuffix: String(did).slice(-10).toUpperCase(),
+  };
+}
 
 /**
  * GET /api/access/records
@@ -21,6 +50,7 @@ router.get("/records", async (req, res) => {
       status: statusLabels[Number(r.status)] || "UNKNOWN",
       updatedBy: r.updatedBy,
       updatedAt: Number(r.updatedAt),
+      validUntil: Number(r.validUntil || 0),
     }));
 
     res.json(records);
@@ -80,6 +110,7 @@ router.post("/requests", async (req, res) => {
       did,
       resourceId,
       blockNumber: receipt.blockNumber,
+      receipt: trustReceipt({ action: "Access requested", decision: "PENDING", did, resourceId, blockNumber: receipt.blockNumber }),
     });
   } catch (err) {
     console.error("Access request error:", err);
@@ -93,10 +124,20 @@ router.post("/requests", async (req, res) => {
  */
 router.post("/grant", async (req, res) => {
   try {
-    const { did, resourceId } = req.body;
+    const { did, resourceId, durationHours } = req.body;
 
     if (!did || !resourceId) {
       return res.status(400).json({ error: "Missing required fields: did, resourceId" });
+    }
+
+    const resource = await get("SELECT sensitivity_label FROM resources_meta WHERE resource_id = ?", [resourceId]);
+    if (!resource) return res.status(404).json({ error: "Protected resource not found" });
+    const policy = policyFor(resource.sensitivity_label);
+    const requestedHours = durationHours === undefined ? policy.defaultHours : Number(durationHours);
+    if (!Number.isInteger(requestedHours) || requestedHours < 1 || requestedHours > policy.maxHours) {
+      return res.status(400).json({
+        error: `${resource.sensitivity_label} resources allow access from 1 to ${policy.maxHours} hours under the current policy.`,
+      });
     }
 
     const signer = personas.ADMIN.signer;
@@ -104,15 +145,19 @@ router.post("/grant", async (req, res) => {
 
     console.log(`Submitting on-chain access grant: ${did} -> ${resourceId}...`);
     const nonce = await getLatestNonce(signer.address);
-    const tx = await contract.grantAccess(did, resourceId, { nonce });
+    const validUntil = Math.floor(Date.now() / 1000) + requestedHours * 60 * 60;
+    const tx = await contract.grantAccessUntil(did, resourceId, validUntil, { nonce });
     const receipt = await tx.wait();
 
     res.json({
       status: "confirmed",
-      message: "Access grant confirmed on-chain. Permission active immediately.",
+      message: `Access grant confirmed on-chain. Permission is active for ${requestedHours} hour${requestedHours === 1 ? "" : "s"}.`,
       did,
       resourceId,
       blockNumber: receipt.blockNumber,
+      validUntil,
+      policy: { sensitivityLabel: resource.sensitivity_label, ...policy },
+      receipt: trustReceipt({ action: "Time-bound access granted", decision: "ALLOW", did, resourceId, sensitivityLabel: resource.sensitivity_label, blockNumber: receipt.blockNumber, validUntil }),
     });
   } catch (err) {
     console.error("Access grant error:", err);
@@ -146,6 +191,7 @@ router.post("/revoke", async (req, res) => {
       did,
       resourceId,
       blockNumber: receipt.blockNumber,
+      receipt: trustReceipt({ action: "Access revoked", decision: "DENY", did, resourceId, blockNumber: receipt.blockNumber }),
     });
   } catch (err) {
     console.error("Access revocation error:", err);
@@ -191,16 +237,36 @@ router.get("/role-permissions/:resourceId/:role", async (req, res) => {
 router.get("/check/:did/:resourceId", async (req, res) => {
   try {
     const { did, resourceId } = req.params;
-    const contract = getContract("AccessControlManager");
+    const [contract, resource] = await Promise.all([
+      getContract("AccessControlManager"),
+      get("SELECT sensitivity_label FROM resources_meta WHERE resource_id = ?", [resourceId]),
+    ]);
+    if (!resource) return res.status(404).json({ error: "Protected resource not found" });
 
-    const hasAccess = await contract.hasAccess(did, resourceId);
+    const [hasAccess, record] = await Promise.all([
+      contract.hasAccess(did, resourceId),
+      contract.getAccessRecord(did, resourceId),
+    ]);
+    const validUntil = Number(record.validUntil || 0);
+    const evaluatedAt = Math.floor(Date.now() / 1000);
+    const expired = Number(record.status) === 2 && validUntil > 0 && evaluatedAt > validUntil;
+    const decision = hasAccess ? "ALLOW" : "DENY";
+    const reason = hasAccess
+      ? validUntil ? "Explicit time-bound grant is currently valid." : "Explicit grant is currently valid."
+      : expired ? "The explicit grant expired; the smart contract automatically denied access."
+      : "No effective explicit grant is available for this identity and resource.";
 
     res.json({
       did,
       resourceId,
       hasAccess,
-      evaluatedAt: Math.floor(Date.now() / 1000),
+      decision,
+      reason,
+      sensitivityLabel: resource.sensitivity_label,
+      validUntil: validUntil || null,
+      evaluatedAt,
       verificationMethod: "SmartContract:hasAccess(did,resourceId)",
+      receipt: trustReceipt({ action: "Access policy evaluated", decision, did, resourceId, sensitivityLabel: resource.sensitivity_label, validUntil }),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

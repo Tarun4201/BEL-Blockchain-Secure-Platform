@@ -7,11 +7,16 @@ async function main() {
   console.log("Deploying BEL Blockchain Platform Contracts");
   console.log("==========================================");
 
-  const signers = await hre.ethers.getSigners();
-  const deployer = signers[0];
-  const securityApprover = signers[1] || deployer;
+  const [deployer, localSecurityApprover] = await hre.ethers.getSigners();
+  // Local Hardhat has several deterministic accounts. A public testnet deploy
+  // commonly exposes only the deployer account, so its independent approver is
+  // supplied as an address rather than as a second deployment signer.
+  const securityApproverAddress = process.env.SECURITY_APPROVER_ADDRESS || localSecurityApprover?.address;
+  if (!securityApproverAddress) {
+    throw new Error("SECURITY_APPROVER_ADDRESS is required when the deployment network has only one signer.");
+  }
   console.log("Deploying with account:", deployer.address);
-  console.log("Security Approver account:", securityApprover.address);
+  console.log("Security Approver account:", securityApproverAddress);
 
   // 1. Deploy IdentityRegistry
   const IdentityRegistry = await hre.ethers.getContractFactory("IdentityRegistry");
@@ -33,7 +38,7 @@ async function main() {
 
   // 3. Deploy AssetRegistry (ERC-721)
   const AssetRegistry = await hre.ethers.getContractFactory("AssetRegistry");
-  const assetRegistry = await AssetRegistry.deploy(identityAddress, securityApprover.address);
+  const assetRegistry = await AssetRegistry.deploy(identityAddress, securityApproverAddress);
   const assetTx = assetRegistry.deploymentTransaction();
   console.log("  Deploying AssetRegistry, tx:", assetTx ? assetTx.hash : "n/a");
   await assetRegistry.waitForDeployment();

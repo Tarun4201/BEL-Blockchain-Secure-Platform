@@ -4,6 +4,16 @@ const { ethers } = require("ethers");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+function configuredValue(name, localFallback) {
+  const value = process.env[name];
+  if (!value && IS_PRODUCTION) {
+    throw new Error(`${name} must be configured when NODE_ENV=production`);
+  }
+  return value || localFallback;
+}
+
 // Load deployed contracts configuration with optional environment variable overrides
 const contractsConfigPath = path.join(__dirname, "config", "contracts.json");
 
@@ -44,8 +54,6 @@ provider.on("error", (err) => {
   console.warn("[RPC Provider Notice]:", err.message || err);
 });
 
-// Load deployed contracts configuration with optional environment variable overrides
-
 function loadContractsConfig() {
   let config = { contracts: {} };
   if (fs.existsSync(contractsConfigPath)) {
@@ -54,6 +62,12 @@ function loadContractsConfig() {
     } catch (e) {
       console.warn("Could not parse contracts.json:", e.message);
     }
+  }
+
+  if (IS_PRODUCTION && Number(config.chainId) === 31337) {
+    throw new Error(
+      "Production cannot use the local Hardhat deployment configuration. Deploy the contracts to the selected public test network first."
+    );
   }
 
   // Allow environment variables to override contract addresses
@@ -86,44 +100,71 @@ const DEFAULT_KEYS = {
   },
 };
 
+function createPersona({ id, name, role, department, designation, prefix, fallback }) {
+  const signer = new ethers.Wallet(
+    configuredValue(`${prefix}_PRIVATE_KEY`, fallback.key),
+    provider
+  );
+  return {
+    id,
+    name: process.env[`${prefix}_NAME`] || name,
+    role: process.env[`${prefix}_ROLE`] || role,
+    department: process.env[`${prefix}_DEPARTMENT`] || department,
+    designation: process.env[`${prefix}_DESIGNATION`] || designation,
+    // Derive the address from the signing key by default so the DID and signer
+    // cannot silently point at different wallets on a hosted network.
+    address: process.env[`${prefix}_ADDRESS`] || signer.address,
+    signer,
+  };
+}
+
 const personas = {
   ADMIN: {
-    id: "admin",
-    name: process.env.ADMIN_NAME || "Admin (Security Officer)",
-    role: process.env.ADMIN_ROLE || "ADMIN",
-    department: process.env.ADMIN_DEPARTMENT || "Cyber Security & Directorate",
-    designation: process.env.ADMIN_DESIGNATION || "Chief Security Administrator",
-    address: process.env.ADMIN_ADDRESS || DEFAULT_KEYS.ADMIN.address,
-    signer: new ethers.Wallet(
-      process.env.ADMIN_PRIVATE_KEY || DEFAULT_KEYS.ADMIN.key,
-      provider
-    ),
+    ...createPersona({
+      id: "admin",
+      name: "Admin (Security Officer)",
+      role: "ADMIN",
+      department: "Cyber Security & Directorate",
+      designation: "Chief Security Administrator",
+      prefix: "ADMIN",
+      fallback: DEFAULT_KEYS.ADMIN,
+    }),
   },
   SHARMA: {
-    id: "sharma",
-    name: process.env.SHARMA_NAME || "R. Sharma",
-    role: process.env.SHARMA_ROLE || "ENGINEER",
-    department: process.env.SHARMA_DEPARTMENT || "Radar & Phased Array Systems",
-    designation: process.env.SHARMA_DESIGNATION || "Senior Systems Engineer",
-    address: process.env.SHARMA_ADDRESS || DEFAULT_KEYS.SHARMA.address,
-    signer: new ethers.Wallet(
-      process.env.SHARMA_PRIVATE_KEY || DEFAULT_KEYS.SHARMA.key,
-      provider
-    ),
+    ...createPersona({
+      id: "sharma",
+      name: "R. Sharma",
+      role: "ENGINEER",
+      department: "Radar & Phased Array Systems",
+      designation: "Senior Systems Engineer",
+      prefix: "SHARMA",
+      fallback: DEFAULT_KEYS.SHARMA,
+    }),
   },
   VERMA: {
-    id: "verma",
-    name: process.env.VERMA_NAME || "A. Verma",
-    role: process.env.VERMA_ROLE || "TECHNICIAN",
-    department: process.env.VERMA_DEPARTMENT || "Electronics Fabrication & Maintenance",
-    designation: process.env.VERMA_DESIGNATION || "Lead Hardware Specialist",
-    address: process.env.VERMA_ADDRESS || DEFAULT_KEYS.VERMA.address,
-    signer: new ethers.Wallet(
-      process.env.VERMA_PRIVATE_KEY || DEFAULT_KEYS.VERMA.key,
-      provider
-    ),
+    ...createPersona({
+      id: "verma",
+      name: "A. Verma",
+      role: "TECHNICIAN",
+      department: "Electronics Fabrication & Maintenance",
+      designation: "Lead Hardware Specialist",
+      prefix: "VERMA",
+      fallback: DEFAULT_KEYS.VERMA,
+    }),
   },
 };
+
+async function validateProductionConfiguration() {
+  if (!IS_PRODUCTION) return;
+
+  const config = loadContractsConfig();
+  const network = await provider.getNetwork();
+  if (Number(network.chainId) !== Number(config.chainId)) {
+    throw new Error(
+      `RPC chain ID ${network.chainId} does not match deployed contract chain ID ${config.chainId}`
+    );
+  }
+}
 
 /**
  * Get contract instance connected to a specific signer or default provider
@@ -183,4 +224,5 @@ module.exports = {
   resolveSigner,
   loadContractsConfig,
   getLatestNonce,
+  validateProductionConfiguration,
 };

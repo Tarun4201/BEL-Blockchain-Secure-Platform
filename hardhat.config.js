@@ -3,10 +3,11 @@ require("@nomicfoundation/hardhat-chai-matchers");
 require("dotenv").config();
 
 const accounts = [
+  process.env.DEPLOYER_PRIVATE_KEY,
   process.env.ADMIN_PRIVATE_KEY,
   process.env.SHARMA_PRIVATE_KEY,
   process.env.VERMA_PRIVATE_KEY,
-].filter(Boolean);
+].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index);
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
