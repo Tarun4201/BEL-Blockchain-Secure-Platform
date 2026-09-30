@@ -129,7 +129,7 @@ async function initDb() {
       unit_id TEXT NOT NULL, primary_department_id TEXT NOT NULL, primary_sbu_id TEXT NOT NULL,
       role_key TEXT NOT NULL, role_name TEXT NOT NULL, employment_status TEXT NOT NULL DEFAULT 'ACTIVE',
       access_level TEXT NOT NULL DEFAULT 'STANDARD', mfa_enabled INTEGER NOT NULL DEFAULT 0,
-      last_login INTEGER, created_at INTEGER NOT NULL
+      wallet_address TEXT, wallet_verified_at INTEGER, last_login INTEGER, created_at INTEGER NOT NULL
     )
   `);
   await run(`
@@ -153,12 +153,34 @@ async function initDb() {
     try { await run(`ALTER TABLE erp_access_requests ADD COLUMN ${column} ${definition}`); }
     catch (err) { if (!String(err.message).includes("duplicate column name")) throw err; }
   }
+  for (const [column, definition] of [["wallet_address", "TEXT"], ["wallet_verified_at", "INTEGER"]]) {
+    try { await run(`ALTER TABLE erp_users ADD COLUMN ${column} ${definition}`); }
+    catch (err) { if (!String(err.message).includes("duplicate column name")) throw err; }
+  }
+  await run("CREATE UNIQUE INDEX IF NOT EXISTS idx_erp_users_wallet_address ON erp_users(wallet_address) WHERE wallet_address IS NOT NULL");
   await run(`
     CREATE TABLE IF NOT EXISTS erp_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT, record_id TEXT UNIQUE NOT NULL, module TEXT NOT NULL,
       title TEXT NOT NULL, status TEXT NOT NULL, unit_id TEXT NOT NULL, department_id TEXT NOT NULL,
       sbu_id TEXT NOT NULL, owner_employee_id TEXT, related_record_id TEXT, amount REAL,
       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS erp_projects (
+      project_id TEXT PRIMARY KEY, project_code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+      status TEXT NOT NULL, phase TEXT NOT NULL, progress INTEGER NOT NULL DEFAULT 0,
+      unit_id TEXT NOT NULL, department_id TEXT NOT NULL, sbu_id TEXT NOT NULL,
+      lead_employee_id TEXT NOT NULL, summary TEXT NOT NULL, updated_at INTEGER NOT NULL
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS erp_project_assignments (
+      assignment_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, employee_id TEXT NOT NULL,
+      relationship TEXT NOT NULL, workstream TEXT NOT NULL, task_title TEXT NOT NULL,
+      task_status TEXT NOT NULL, access_level TEXT NOT NULL, grant_status TEXT NOT NULL,
+      valid_until INTEGER, updated_at INTEGER NOT NULL,
+      UNIQUE(project_id, employee_id, task_title)
     )
   `);
   await run(`
@@ -210,6 +232,8 @@ async function resetDb() {
   await run("DROP TABLE IF EXISTS erp_users");
   await run("DROP TABLE IF EXISTS erp_access_requests");
   await run("DROP TABLE IF EXISTS erp_records");
+  await run("DROP TABLE IF EXISTS erp_project_assignments");
+  await run("DROP TABLE IF EXISTS erp_projects");
   await run("DROP TABLE IF EXISTS erp_audit_logs");
   await run("DROP TABLE IF EXISTS erp_guide_progress");
   await run("DROP TABLE IF EXISTS erp_security_alerts");
@@ -251,6 +275,16 @@ async function seedErpDemo() {
     ["BEL-EMP-1009", "Neha Iyer", "neha.iyer@demo.bel", "EMPLOYEE", "BENGALURU", "INTERNAL_AUDIT", "CORPORATE", "INTERNAL_AUDITOR", "Internal Auditor"],
     ["BEL-EMP-1010", "Rohan Sharma", "rohan.sharma@demo.bel", "EMPLOYEE", "BENGALURU", "IT", "CORPORATE", "ERP_ADMIN", "ERP Administrator"],
     ["BEL-EMP-1011", "Kavya Rao", "kavya.rao@demo.bel", "EMPLOYEE", "BENGALURU", "SECURITY", "CORPORATE", "ASSET_CUSTODY_APPROVER", "Asset Custody Security Approver"],
+    ["BEL-EMP-1012", "Meera Krishnan", "meera.krishnan@demo.bel", "EMPLOYEE", "BENGALURU", "PROCUREMENT", "BENGALURU_SOFTWARE", "PROCUREMENT_OFFICER", "Procurement Officer"],
+    ["BEL-EMP-1013", "Aditya Kulkarni", "aditya.kulkarni@demo.bel", "EMPLOYEE", "BENGALURU", "FINANCE", "BENGALURU_SOFTWARE", "FINANCE_OFFICER", "Finance Officer"],
+    ["BEL-EMP-1014", "Sonal Deshmukh", "sonal.deshmukh@demo.bel", "EMPLOYEE", "BENGALURU", "PRODUCTION", "BENGALURU_NAVAL", "PRODUCTION_MANAGER", "Production Manager"],
+    ["BEL-EMP-1015", "Ishaan Bhat", "ishaan.bhat@demo.bel", "EMPLOYEE", "BENGALURU", "QUALITY", "BENGALURU_NAVAL", "QUALITY_OFFICER", "Quality Officer"],
+    ["BEL-EMP-1016", "Divya Joseph", "divya.joseph@demo.bel", "EMPLOYEE", "BENGALURU", "ENGINEERING", "BENGALURU_SOFTWARE", "ENGINEERING_OFFICER", "R&D Engineer"],
+    ["BEL-EMP-1017", "Nitin Gupta", "nitin.gupta@demo.bel", "EMPLOYEE", "BENGALURU", "LOGISTICS", "BENGALURU_EXPORT", "LOGISTICS_OFFICER", "Logistics Officer"],
+    ["BEL-EMP-1018", "Farah Khan", "farah.khan@demo.bel", "EMPLOYEE", "BENGALURU", "HR", "CORPORATE", "HR_OFFICER", "HR Officer"],
+    ["BEL-EMP-1019", "Arvind Patel", "arvind.patel@demo.bel", "EMPLOYEE", "BENGALURU", "VIGILANCE", "CORPORATE", "COMPLIANCE_OFFICER", "Compliance / Vigilance Officer"],
+    ["BEL-EMP-1020", "Tanvi Bose", "tanvi.bose@demo.bel", "EMPLOYEE", "BENGALURU", "INTERNAL_AUDIT", "CORPORATE", "INTERNAL_AUDITOR", "Internal Auditor"],
+    ["BEL-EMP-1021", "Suresh Iyer", "suresh.iyer@demo.bel", "EMPLOYEE", "BENGALURU", "SECURITY", "CORPORATE", "ASSET_CUSTODY_APPROVER", "Asset Custody Security Approver"],
     ["VEN-0001", "NovaTech Components Pvt. Ltd.", "portal@novatech.demo", "VENDOR", "BENGALURU", "PROCUREMENT", "BENGALURU_SOFTWARE", "VENDOR", "Approved Vendor"],
     ["CUS-0001", "Defence Systems Demo Client", "client@defence-demo.example", "CUSTOMER", "BENGALURU", "SALES", "CORPORATE", "CUSTOMER", "Customer / Government Client"],
   ];
@@ -265,7 +299,10 @@ async function seedErpDemo() {
     ["procurement", "PROCUREMENT", "BENGALURU_SOFTWARE", "PO", "Purchase Order", 15], ["finance", "FINANCE", "BENGALURU_SOFTWARE", "INV", "Supplier Invoice", 20],
     ["inventory", "PROCUREMENT", "BENGALURU_SOFTWARE", "INVTX", "Inventory Transaction", 30], ["quality", "QUALITY", "BENGALURU_NAVAL", "QI", "Quality Inspection", 15],
     ["production", "PRODUCTION", "BENGALURU_NAVAL", "PROD", "Production Order", 10], ["engineering", "ENGINEERING", "BENGALURU_SOFTWARE", "PROJ", "Project", 10],
-    ["logistics", "LOGISTICS", "BENGALURU_EXPORT", "SHIP", "Shipment", 15],
+    ["logistics", "LOGISTICS", "BENGALURU_EXPORT", "SHIP", "Shipment", 24], ["projects", "ENGINEERING", "BENGALURU_SOFTWARE", "PM", "Engineering Project", 18],
+    ["hr", "HR", "CORPORATE", "HRR", "Personnel Record", 16], ["compliance", "VIGILANCE", "CORPORATE", "CMP", "Compliance Review", 18],
+    ["vendors", "PROCUREMENT", "BENGALURU_SOFTWARE", "VENR", "Vendor Qualification", 18], ["reports", "FINANCE", "BENGALURU_SOFTWARE", "RPT", "Management Report", 16],
+    ["vendor-records", "PROCUREMENT", "BENGALURU_SOFTWARE", "VPO", "Vendor Order", 14], ["customer-records", "SALES", "CORPORATE", "CDL", "Customer Delivery", 14],
   ];
   for (const [module, department, sbu, prefix, title, count] of recordSets) {
     for (let i = 1; i <= count; i += 1) {
@@ -275,6 +312,94 @@ async function seedErpDemo() {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [recordId, module, `${title} ${String(i).padStart(3, "0")} — DEMO`, i % 5 === 0 ? "UNDER REVIEW" : "APPROVED", "BENGALURU", department, sbu, "BEL-EMP-1001", 25000 + i * 1375, now - i * 86400, now - i * 3600]);
     }
+  }
+  // Project work is intentionally separated by function. These fictional records
+  // let each demonstration account see its own deliverables, while the ERP
+  // administrator receives a complete cross-project portfolio.
+  const projects = [
+    ["PRJ-SW-01", "SW-26-01", "Secure Data Link Prototype", "ON TRACK", "Design validation", 68, "ENGINEERING", "BENGALURU_SOFTWARE", "BEL-EMP-1005", "R&D prototype validation for a protected tactical data-link demonstrator."],
+    ["PRJ-SW-02", "SW-26-02", "Mission Software Sustainment", "ON TRACK", "Integration", 54, "ENGINEERING", "BENGALURU_SOFTWARE", "BEL-EMP-1016", "Software sustainment and release-readiness workstream."],
+    ["PRJ-PR-03", "PR-26-03", "Avionics Supplier Readiness", "AT RISK", "Sourcing", 41, "PROCUREMENT", "BENGALURU_SOFTWARE", "BEL-EMP-1001", "Qualification and commercial readiness for approved avionics suppliers."],
+    ["PRJ-FI-04", "FI-26-04", "Export Cost Assurance", "ON TRACK", "Cost review", 72, "FINANCE", "BENGALURU_SOFTWARE", "BEL-EMP-1002", "Cost-control review for an export manufacturing delivery milestone."],
+    ["PRJ-NV-05", "NV-26-05", "Naval Sonar Integration", "ON TRACK", "Build integration", 63, "PRODUCTION", "BENGALURU_NAVAL", "BEL-EMP-1003", "Manufacturing and assembly readiness for naval sonar integration."],
+    ["PRJ-QA-06", "QA-26-06", "Naval Acceptance Traceability", "ON TRACK", "Acceptance test", 58, "QUALITY", "BENGALURU_NAVAL", "BEL-EMP-1004", "Quality evidence and acceptance traceability for the naval programme."],
+    ["PRJ-LG-07", "LG-26-07", "Export Dispatch Readiness", "AWAITING APPROVAL", "Dispatch planning", 46, "LOGISTICS", "BENGALURU_EXPORT", "BEL-EMP-1006", "Controlled export dispatch, packing and logistics coordination."],
+    ["PRJ-HR-08", "HR-26-08", "Engineering Skills Certification", "ON TRACK", "Certification review", 77, "HR", "CORPORATE", "BEL-EMP-1007", "Role certification and workforce readiness for the engineering organisation."],
+    ["PRJ-CP-09", "CP-26-09", "Export Compliance Review", "UNDER REVIEW", "Regulatory review", 49, "VIGILANCE", "CORPORATE", "BEL-EMP-1008", "Compliance evidence review for controlled export activity."],
+    ["PRJ-AU-10", "AU-26-10", "Quarterly Controls Assurance", "ON TRACK", "Evidence sampling", 61, "INTERNAL_AUDIT", "CORPORATE", "BEL-EMP-1009", "Independent audit of approvals, grants and protected evidence."],
+    ["PRJ-CS-11", "CS-26-11", "Controlled Asset Custody", "ON TRACK", "Custody review", 52, "SECURITY", "CORPORATE", "BEL-EMP-1011", "Two-person controlled-asset custody review and attestation."],
+    ["PRJ-VD-12", "VD-26-12", "Supplier Delivery Readiness", "ON TRACK", "Delivery evidence", 66, "PROCUREMENT", "BENGALURU_SOFTWARE", "VEN-0001", "Vendor delivery milestones and secure evidence submission."],
+    ["PRJ-CU-13", "CU-26-13", "Customer Acceptance Readiness", "PLANNED", "Acceptance planning", 28, "SALES", "CORPORATE", "CUS-0001", "Customer delivery acceptance planning and approved status visibility."],
+  ];
+  for (const [projectId, projectCode, name, status, phase, progress, departmentId, sbuId, leadEmployeeId, summary] of projects) {
+    await run(`INSERT OR IGNORE INTO erp_projects
+      (project_id, project_code, name, status, phase, progress, unit_id, department_id, sbu_id, lead_employee_id, summary, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [projectId, projectCode, name, status, phase, progress, "BENGALURU", departmentId, sbuId, leadEmployeeId, summary, now - progress * 180]);
+  }
+  const projectAssignments = [
+    ["ASN-001", "PRJ-SW-01", "BEL-EMP-1005", "PROJECT LEAD", "Prototype engineering", "Complete interface validation evidence", "IN PROGRESS", "EDIT", "PRIMARY"],
+    ["ASN-002", "PRJ-SW-01", "BEL-EMP-1016", "TECHNICAL CONTRIBUTOR", "Integration test", "Review secure-data-link integration findings", "READY FOR REVIEW", "VIEW", "GRANTED"],
+    ["ASN-003", "PRJ-SW-02", "BEL-EMP-1016", "PROJECT LEAD", "Release readiness", "Prepare mission-software release checklist", "IN PROGRESS", "EDIT", "PRIMARY"],
+    ["ASN-004", "PRJ-PR-03", "BEL-EMP-1001", "PROJECT LEAD", "Supplier sourcing", "Approve avionics supplier evaluation pack", "AWAITING APPROVAL", "EDIT", "PRIMARY"],
+    ["ASN-005", "PRJ-PR-03", "BEL-EMP-1012", "BUYER", "Supplier qualification", "Collect supplier quality observations", "IN PROGRESS", "VIEW", "PRIMARY"],
+    ["ASN-006", "PRJ-FI-04", "BEL-EMP-1002", "COST CONTROLLER", "Cost review", "Reconcile export cost exception ledger", "IN PROGRESS", "EDIT", "PRIMARY"],
+    ["ASN-007", "PRJ-FI-04", "BEL-EMP-1013", "FINANCE ANALYST", "Invoice verification", "Verify milestone invoice supporting evidence", "READY FOR REVIEW", "VIEW", "PRIMARY"],
+    ["ASN-008", "PRJ-NV-05", "BEL-EMP-1003", "PRODUCTION LEAD", "Build integration", "Release sonar assembly build package", "IN PROGRESS", "EDIT", "PRIMARY"],
+    ["ASN-009", "PRJ-NV-05", "BEL-EMP-1014", "PRODUCTION PLANNER", "Material staging", "Confirm production material staging", "ON TRACK", "VIEW", "PRIMARY"],
+    ["ASN-010", "PRJ-QA-06", "BEL-EMP-1004", "QUALITY LEAD", "Acceptance test", "Approve acceptance traceability sample", "IN PROGRESS", "EDIT", "PRIMARY"],
+    ["ASN-011", "PRJ-QA-06", "BEL-EMP-1015", "QUALITY ENGINEER", "Test evidence", "Review nonconformance closure evidence", "READY FOR REVIEW", "VIEW", "PRIMARY"],
+    ["ASN-012", "PRJ-LG-07", "BEL-EMP-1006", "LOGISTICS LEAD", "Dispatch planning", "Approve controlled dispatch plan", "AWAITING APPROVAL", "EDIT", "PRIMARY"],
+    ["ASN-013", "PRJ-LG-07", "BEL-EMP-1017", "LOGISTICS COORDINATOR", "Freight documentation", "Resolve freight invoice exception", "BLOCKED", "VIEW", "PENDING"],
+    ["ASN-014", "PRJ-HR-08", "BEL-EMP-1007", "HR LEAD", "Certification review", "Publish engineering certification readiness summary", "IN PROGRESS", "EDIT", "PRIMARY"],
+    ["ASN-015", "PRJ-HR-08", "BEL-EMP-1018", "HR ANALYST", "Training evidence", "Validate competency record completeness", "READY FOR REVIEW", "VIEW", "PRIMARY"],
+    ["ASN-016", "PRJ-CP-09", "BEL-EMP-1008", "COMPLIANCE LEAD", "Regulatory review", "Review controlled-export compliance checklist", "UNDER REVIEW", "EDIT", "PRIMARY"],
+    ["ASN-017", "PRJ-CP-09", "BEL-EMP-1019", "COMPLIANCE ANALYST", "Evidence review", "Compile regulatory evidence exceptions", "IN PROGRESS", "VIEW", "PRIMARY"],
+    ["ASN-018", "PRJ-AU-10", "BEL-EMP-1009", "AUDIT LEAD", "Evidence sampling", "Review approval and grant evidence sample", "IN PROGRESS", "AUDIT", "PRIMARY"],
+    ["ASN-019", "PRJ-AU-10", "BEL-EMP-1020", "AUDIT ANALYST", "Controls testing", "Test time-bound grant expiry controls", "READY FOR REVIEW", "AUDIT", "GRANTED"],
+    ["ASN-020", "PRJ-CS-11", "BEL-EMP-1011", "CUSTODY APPROVER", "Custody review", "Complete second-person custody attestation", "AWAITING APPROVAL", "APPROVE", "PRIMARY"],
+    ["ASN-021", "PRJ-CS-11", "BEL-EMP-1021", "CUSTODY REVIEWER", "Asset review", "Validate custody condition evidence", "IN PROGRESS", "VIEW", "PRIMARY"],
+    ["ASN-022", "PRJ-VD-12", "VEN-0001", "APPROVED VENDOR", "Delivery evidence", "Upload delivery readiness evidence", "IN PROGRESS", "CREATE", "PRIMARY"],
+    ["ASN-023", "PRJ-CU-13", "CUS-0001", "CUSTOMER OBSERVER", "Acceptance planning", "Review approved acceptance milestone status", "PLANNED", "VIEW", "PRIMARY"],
+  ];
+  for (const [assignmentId, projectId, employeeId, relationship, workstream, taskTitle, taskStatus, accessLevel, grantStatus] of projectAssignments) {
+    const expiresAt = grantStatus === "GRANTED" ? now + 14 * 86400 : grantStatus === "PENDING" ? null : now + 90 * 86400;
+    await run(`INSERT OR IGNORE INTO erp_project_assignments
+      (assignment_id, project_id, employee_id, relationship, workstream, task_title, task_status, access_level, grant_status, valid_until, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [assignmentId, projectId, employeeId, relationship, workstream, taskTitle, taskStatus, accessLevel, grantStatus, expiresAt, now - 3600]);
+    await run(`INSERT OR IGNORE INTO erp_audit_logs
+      (audit_id, employee_id, action, unit_id, department_id, sbu_id, target_id, result, reason, visibility, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [`AUD-ROLE-${assignmentId}`, employeeId, grantStatus === "PENDING" ? "ACCESS_REQUEST_SUBMITTED" : "PROJECT_TASK_ASSIGNED", "BENGALURU", null, null, projectId, grantStatus === "PENDING" ? "PENDING" : "SUCCESS", `${taskTitle} · ${workstream}`, "PERSONAL", now - Number(assignmentId.slice(-3)) * 900]);
+  }
+  for (const [projectId, projectCode, name, status, _phase, progress, departmentId, sbuId, leadEmployeeId] of projects) {
+    await run(`INSERT OR IGNORE INTO erp_records
+      (record_id, module, title, status, unit_id, department_id, sbu_id, owner_employee_id, related_record_id, amount, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [`${projectCode}-STATUS`, "projects", `${name} — ${status}`, status, "BENGALURU", departmentId, sbuId, leadEmployeeId, projectId, 100000 + progress * 1000, now - progress * 7200, now - progress * 180]);
+  }
+  const accessRequests = [
+    ["IAR-2026-DEMO01", "BEL-EMP-1001", "FINANCE", "BENGALURU_SOFTWARE", "finance", "VIEW", "Invoice reconciliation support", "NORMAL", "STANDARD", "PENDING", null, null, 2],
+    ["IAR-2026-DEMO02", "BEL-EMP-1005", "PROCUREMENT", "BENGALURU_SOFTWARE", "procurement", "VIEW", "Approved design procurement review", "URGENT", "STANDARD", "APPROVED", "BEL-EMP-1010", "Approved for the stated review period.", 4],
+    ["IAR-2026-DEMO03", "BEL-EMP-1006", "ENGINEERING", "BENGALURU_SOFTWARE", "engineering", "VIEW", "Shipment engineering coordination", "NORMAL", "STANDARD", "APPROVED", "BEL-EMP-1010", "Least-privilege view access approved.", 1],
+    ["IAR-2026-DEMO04", "BEL-EMP-1012", "QUALITY", "BENGALURU_NAVAL", "quality", "AUDIT", "Supplier quality observation", "NORMAL", "STANDARD", "REJECTED", "BEL-EMP-1010", "Request requires an assigned quality sponsor.", 7],
+    ["IAR-2026-DEMO05", "BEL-EMP-1017", "FINANCE", "BENGALURU_SOFTWARE", "finance", "VIEW", "Freight invoice exception review", "URGENT", "EMERGENCY", "PENDING", null, null, 1],
+    ["IAR-2026-DEMO06", "BEL-EMP-1020", "SECURITY", "CORPORATE", "security-signals", "AUDIT", "Quarterly evidence review", "NORMAL", "STANDARD", "APPROVED", "BEL-EMP-1010", "Audit access granted for the quarterly review.", 8],
+  ];
+  for (const [requestId, employeeId, departmentId, sbuId, module, permission, reason, priority, mode, status, approvedBy, note, days] of accessRequests) {
+    await run(`INSERT OR IGNORE INTO erp_access_requests
+      (request_id, employee_id, target_unit_id, target_department_id, target_sbu_id, requested_module, requested_permission, business_reason, priority, access_mode, approval_note, start_date, end_date, status, approved_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [requestId, employeeId, "BENGALURU", departmentId, sbuId, module, permission, reason, priority, mode, note, now - 3600, now + days * 86400, status, approvedBy, now - days * 86400, now - 1800]);
+  }
+  const securitySignals = [
+    ["SIG-DEMO-001", "BEL-EMP-1017", "UNUSUAL_ACCESS_PATTERN", "HIGH", 4, "Multiple out-of-pattern access attempts were contained and require review."],
+    ["SIG-DEMO-002", "BEL-EMP-1012", "PERMISSION_EXPIRY_WARNING", "MEDIUM", 2, "A temporary access approval will expire within the demonstration window."],
+    ["SIG-DEMO-003", "BEL-EMP-1005", "CUSTODY_REVIEW_REQUIRED", "CRITICAL", 1, "A high-assurance asset custody action requires a second authorised reviewer."],
+  ];
+  for (const [alertId, employeeId, alertType, severity, evidenceCount, summary] of securitySignals) {
+    await run("INSERT OR IGNORE INTO erp_security_alerts (alert_id, employee_id, alert_type, severity, evidence_count, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [alertId, employeeId, alertType, severity, evidenceCount, summary, now - evidenceCount * 1800, now - evidenceCount * 900]);
   }
   const existingLogs = await get("SELECT COUNT(*) AS count FROM erp_audit_logs");
   if (!existingLogs?.count) {

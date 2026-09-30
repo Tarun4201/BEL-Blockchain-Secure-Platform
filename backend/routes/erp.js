@@ -1,6 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
+const { ethers } = require("ethers");
 const { all, get, run } = require("../db");
 const { getContract, provider, personas, getLatestNonce } = require("../blockchain");
 const { verifyDocumentIntegrity } = require("../utils/hasher");
@@ -11,7 +12,7 @@ const sessions = new Map();
 const SESSION_TTL_SECONDS = 30 * 60;
 
 const MODULES_BY_ROLE = {
-  ERP_ADMIN: ["dashboard", "identity-assertion", "procurement", "finance", "inventory", "production", "quality", "engineering", "logistics", "access-control", "asset-passport", "security-signals", "demo-simulator", "organization", "users", "audit", "reports", "blockchain", "profile"],
+  ERP_ADMIN: ["dashboard", "identity-assertion", "procurement", "finance", "inventory", "production", "quality", "engineering", "logistics", "access-control", "asset-passport", "security-signals", "demo-simulator", "organization", "users", "audit", "reports", "blockchain", "architecture", "profile"],
   PROCUREMENT_OFFICER: ["dashboard", "procurement", "vendors", "access-control", "notifications", "profile"],
   FINANCE_OFFICER: ["dashboard", "finance", "access-control", "reports", "profile"],
   PRODUCTION_MANAGER: ["dashboard", "production", "inventory", "quality", "profile"],
@@ -31,11 +32,37 @@ const MODULE_LABELS = {
   production: "Production", quality: "Quality", engineering: "R&D / Engineering", projects: "Project Management", hr: "Human Resources",
   logistics: "Logistics", compliance: "Compliance", audit: "Audit", reports: "Reports", "access-control": "Access Control",
   organization: "Organization Masters", users: "Users & Permissions", notifications: "Notifications", blockchain: "Blockchain Registry", "asset-passport": "Asset Passport", "identity-assertion": "Identity Assertion", "security-signals": "Security Signals", "demo-simulator": "Judge Demo Mode", profile: "My Profile",
-  "vendor-records": "My Orders", "customer-records": "My Deliveries",
+  "vendor-records": "My Orders", "customer-records": "My Deliveries", architecture: "System Architecture",
 };
+
+const CHAIN_ACCESS_POLICY = Object.freeze({
+  RESTRICTED: { maxHours: 168, defaultHours: 24 },
+  CONFIDENTIAL: { maxHours: 72, defaultHours: 12 },
+  SECRET: { maxHours: 24, defaultHours: 8 },
+  TOP_SECRET: { maxHours: 4, defaultHours: 1 },
+});
+
+function chainAccessPolicy(sensitivityLabel) {
+  return CHAIN_ACCESS_POLICY[String(sensitivityLabel || "RESTRICTED").toUpperCase()] || CHAIN_ACCESS_POLICY.RESTRICTED;
+}
+
+function policyReceipt({ decision, resourceId, sensitivityLabel, blockNumber, validUntil }) {
+  return {
+    decision,
+    protectedResource: resourceId,
+    sensitivityLabel,
+    expiresAt: validUntil || null,
+    blockNumber,
+    evidence: "Smart-contract transaction confirmed",
+    explanation: validUntil
+      ? "The contract will deny this access automatically after the stated deadline."
+      : "The contract recorded an immediate policy decision.",
+  };
+}
 
 const hashPassword = (password) => crypto.createHash("sha256").update(password || "").digest("hex");
 const now = () => Math.floor(Date.now() / 1000);
+const walletLabel = (address) => address ? `${address.slice(0, 6)}…${address.slice(-4)}` : null;
 
 function publicUser(row) {
   return {
@@ -53,6 +80,8 @@ function publicUser(row) {
     roleKey: row.role_key,
     accessLevel: row.access_level,
     mfaEnabled: Boolean(row.mfa_enabled),
+    walletConnected: Boolean(row.wallet_address),
+    walletLabel: walletLabel(row.wallet_address),
   };
 }
 
@@ -122,6 +151,79 @@ function activeWorkspace(workspaces, requestedDepartment) {
   return workspaces.find((workspace) => workspace.departmentId === requestedDepartment) || workspaces[0];
 }
 
+async function adminDashboardSnapshot() {
+  const [pendingRequestRow, openSignalRow, projectPortfolio] = await Promise.all([
+    get("SELECT COUNT(*) AS count FROM erp_access_requests WHERE status = 'PENDING'"),
+    get("SELECT COUNT(*) AS count FROM erp_security_alerts WHERE status = 'OPEN'"),
+    all(`SELECT p.project_code AS projectCode, p.name, p.status, p.phase, p.progress,
+      d.name AS department, lead.full_name AS leadName, COUNT(a.assignment_id) AS assignedCount
+      FROM erp_projects p
+      JOIN erp_departments d ON d.id = p.department_id
+      JOIN erp_users lead ON lead.employee_id = p.lead_employee_id
+      LEFT JOIN erp_project_assignments a ON a.project_id = p.project_id
+      GROUP BY p.project_id
+      ORDER BY CASE p.status WHEN 'AT RISK' THEN 0 WHEN 'AWAITING APPROVAL' THEN 1 WHEN 'UNDER REVIEW' THEN 2 ELSE 3 END, p.updated_at DESC`),
+  ]);
+  const base = { pendingRequests: Number(pendingRequestRow?.count || 0), openSignals: Number(openSignalRow?.count || 0), projectPortfolio: projectPortfolio.map((item) => ({ ...item, assignedCount: Number(item.assignedCount || 0) })) };
+  try {
+    const [identityContract, accessContract, assetContract, blockNumber] = await Promise.all([
+      getContract("IdentityRegistry"), getContract("AccessControlManager"), getContract("AssetRegistry"), provider.getBlockNumber(),
+    ]);
+    const [identities, assets, records] = await Promise.all([
+      identityContract.getAllIdentities(), assetContract.getAllAssets(), accessContract.getAllAccessRecords(),
+    ]);
+    const timestamp = now();
+    const explicitGrants = records.filter((record) => Number(record.status) === 2);
+    const activePermissions = explicitGrants.filter((record) => !Number(record.validUntil || 0) || Number(record.validUntil) >= timestamp);
+    const expiringSoon = activePermissions.filter((record) => {
+      const expiry = Number(record.validUntil || 0);
+      return expiry > 0 && expiry - timestamp <= 24 * 60 * 60;
+    });
+    return {
+      ...base,
+      available: true,
+      blockNumber,
+      verifiedIdentities: identities.length,
+      registeredAssets: assets.length,
+      activePermissions: activePermissions.length,
+      timeBoundPermissions: explicitGrants.filter((record) => Number(record.validUntil || 0) > 0).length,
+      expiringSoon: expiringSoon.length,
+    };
+  } catch {
+    return { ...base, available: false, verifiedIdentities: 0, registeredAssets: 0, activePermissions: 0, timeBoundPermissions: 0, expiringSoon: 0 };
+  }
+}
+
+async function projectContextFor(user, isAdmin) {
+  if (isAdmin) {
+    const portfolio = await all(`SELECT p.project_id AS projectId, p.project_code AS projectCode, p.name, p.status, p.phase,
+      p.progress, p.summary, p.updated_at AS updatedAt, d.name AS department, s.name AS sbu,
+      lead.full_name AS leadName, COUNT(a.assignment_id) AS assignedCount
+      FROM erp_projects p
+      JOIN erp_departments d ON d.id = p.department_id
+      JOIN erp_sbus s ON s.id = p.sbu_id
+      JOIN erp_users lead ON lead.employee_id = p.lead_employee_id
+      LEFT JOIN erp_project_assignments a ON a.project_id = p.project_id
+      GROUP BY p.project_id
+      ORDER BY CASE p.status WHEN 'AT RISK' THEN 0 WHEN 'AWAITING APPROVAL' THEN 1 WHEN 'UNDER REVIEW' THEN 2 ELSE 3 END, p.updated_at DESC`);
+    return { portfolio: portfolio.map((item) => ({ ...item, assignedCount: Number(item.assignedCount || 0) })) };
+  }
+
+  const [assignments, grants] = await Promise.all([
+    all(`SELECT p.project_id AS projectId, p.project_code AS projectCode, p.name AS projectName, p.status AS projectStatus,
+      p.phase, p.progress, p.summary, a.relationship, a.workstream, a.task_title AS taskTitle,
+      a.task_status AS taskStatus, a.access_level AS accessLevel, a.grant_status AS grantStatus,
+      a.valid_until AS validUntil, a.updated_at AS updatedAt
+      FROM erp_project_assignments a
+      JOIN erp_projects p ON p.project_id = a.project_id
+      WHERE a.employee_id = ? ORDER BY p.updated_at DESC, a.updated_at DESC`, [user.employee_id]),
+    all(`SELECT request_id AS requestId, requested_module AS requestedModule, requested_permission AS requestedPermission,
+      business_reason AS businessReason, status, end_date AS endDate, access_mode AS accessMode,
+      priority FROM erp_access_requests WHERE employee_id = ? ORDER BY updated_at DESC LIMIT 6`, [user.employee_id]),
+  ]);
+  return { assignments, grants };
+}
+
 router.get("/bootstrap", async (_req, res) => {
   const [units, departments, sbus, users] = await Promise.all([
     all("SELECT id, name FROM erp_units WHERE status = 'ACTIVE' ORDER BY name"),
@@ -162,13 +264,42 @@ router.get("/me", requireSession, async (req, res) => {
   res.json({ user: publicUser(req.erpUser), workspaces });
 });
 
+router.post("/wallet/challenge", requireSession, (req, res) => {
+  const nonce = crypto.randomUUID();
+  const expiresAt = now() + 5 * 60;
+  const message = `BEL TrustGrid wallet verification\nEmployee: ${req.erpUser.employee_id}\nNonce: ${nonce}\nExpires: ${expiresAt}\n\nThis signature proves wallet control only. It does not approve access or create a blockchain transaction.`;
+  sessions.set(req.erpSession, { ...sessions.get(req.erpSession), walletChallenge: { nonce, message, expiresAt } });
+  res.json({ message, expiresAt });
+});
+
+router.post("/wallet/verify", requireSession, async (req, res) => {
+  const challenge = sessions.get(req.erpSession)?.walletChallenge;
+  const signature = String(req.body?.signature || "");
+  if (!challenge || challenge.expiresAt < now()) return res.status(400).json({ error: "Wallet verification request expired. Request a new signature." });
+  if (!signature) return res.status(400).json({ error: "A MetaMask signature is required to verify wallet control." });
+  let address;
+  try { address = ethers.getAddress(ethers.verifyMessage(challenge.message, signature)); }
+  catch { return res.status(400).json({ error: "The signature could not be verified for this wallet challenge." }); }
+  const existing = await get("SELECT employee_id FROM erp_users WHERE lower(wallet_address) = lower(?) AND employee_id <> ?", [address, req.erpUser.employee_id]);
+  if (existing) return res.status(409).json({ error: "This wallet is already verified for another demonstration profile." });
+  await run("UPDATE erp_users SET wallet_address = ?, wallet_verified_at = ? WHERE employee_id = ?", [address, now(), req.erpUser.employee_id]);
+  sessions.set(req.erpSession, { ...sessions.get(req.erpSession), walletChallenge: null });
+  await logEvent({ employeeId: req.erpUser.employee_id, action: "WALLET_CONTROL_VERIFIED", unitId: req.erpUser.unit_id, departmentId: req.erpUser.primary_department_id, sbuId: req.erpUser.primary_sbu_id, targetId: walletLabel(address), result: "SUCCESS", reason: "MetaMask signature verified; role permissions unchanged", visibility: "PERSONAL" });
+  res.json({ walletConnected: true, walletLabel: walletLabel(address), message: "MetaMask wallet control verified. Your ERP permissions remain governed by role and approval policy." });
+});
+
 router.get("/dashboard", requireSession, async (req, res) => {
   const workspaces = await workspacesFor(req.erpUser);
   const workspace = activeWorkspace(workspaces, req.query.departmentId);
-  const [records, recent, requests] = await Promise.all([
+  const isAdmin = req.erpUser.role_key === "ERP_ADMIN";
+  const [records, recent, requests, adminSnapshot, projectContext] = await Promise.all([
     all("SELECT module, COUNT(*) AS count FROM erp_records WHERE department_id = ? AND unit_id = ? AND sbu_id = ? GROUP BY module", [workspace.departmentId, workspace.unitId, workspace.sbuId]),
-    all("SELECT audit_id AS auditId, action, target_id AS targetId, result, created_at AS createdAt FROM erp_audit_logs WHERE employee_id = ? ORDER BY created_at DESC LIMIT 8", [req.erpUser.employee_id]),
+    isAdmin
+      ? all("SELECT audit_id AS auditId, action, target_id AS targetId, result, created_at AS createdAt FROM erp_audit_logs ORDER BY created_at DESC LIMIT 8")
+      : all("SELECT audit_id AS auditId, action, target_id AS targetId, result, created_at AS createdAt FROM erp_audit_logs WHERE employee_id = ? ORDER BY created_at DESC LIMIT 8", [req.erpUser.employee_id]),
     all("SELECT status, COUNT(*) AS count FROM erp_access_requests WHERE employee_id = ? GROUP BY status", [req.erpUser.employee_id]),
+    isAdmin ? adminDashboardSnapshot() : Promise.resolve(null),
+    projectContextFor(req.erpUser, isAdmin),
   ]);
   const requestCounts = Object.fromEntries(requests.map((item) => [item.status, Number(item.count)]));
   res.json({
@@ -176,6 +307,8 @@ router.get("/dashboard", requireSession, async (req, res) => {
     modules: workspace.modules.map((id) => ({ id, label: MODULE_LABELS[id] || id })),
     counts: records,
     recentActivity: recent,
+    adminSnapshot,
+    projectContext,
     trustJourney: {
       identity: "Verified organisational identity",
       policy: req.erpUser.role_name,
@@ -196,17 +329,64 @@ router.get("/blockchain/overview", requireSession, async (req, res) => {
     const [identityContract, accessContract, assetContract, blockNumber] = await Promise.all([
       getContract("IdentityRegistry"), getContract("AccessControlManager"), getContract("AssetRegistry"), provider.getBlockNumber(),
     ]);
-    const [identities, resources, assets, records] = await Promise.all([
-      identityContract.getAllIdentities(), accessContract.getAllResources(), assetContract.getAllAssets(), accessContract.getAllAccessRecords(),
+    const [identities, resources, assets, records, latestBlock] = await Promise.all([
+      identityContract.getAllIdentities(), accessContract.getAllResources(), assetContract.getAllAssets(), accessContract.getAllAccessRecords(), provider.getBlock(blockNumber),
     ]);
     res.json({
       blockNumber,
+      chainTime: Number(latestBlock.timestamp),
       identities: identities.map((item) => ({ did: item.did, wallet: item.userAddress, role: item.role, registeredAt: Number(item.registeredAt) })),
       resources: resources.map((item) => ({ resourceId: item.resourceId, sensitivityLabel: item.sensitivityLabel, createdAt: Number(item.createdAt) })),
       assets: assets.map((item) => ({ assetId: Number(item.assetId), metadataURI: item.metadataURI, currentOwnerDid: item.currentOwnerDid, tokenOwnerWallet: item.currentOwnerWallet, status: Number(item.status) === 0 ? "ACTIVE" : "RETIRED", mintedAt: Number(item.mintedAt) })),
-      accessRecords: records.map((item) => ({ did: item.did, resourceId: item.resourceId, status: ["NONE", "REQUESTED", "GRANTED", "REVOKED"][Number(item.status)] || "UNKNOWN", updatedAt: Number(item.updatedAt) })),
+      accessRecords: records.map((item) => ({ did: item.did, resourceId: item.resourceId, status: ["NONE", "REQUESTED", "GRANTED", "REVOKED"][Number(item.status)] || "UNKNOWN", updatedAt: Number(item.updatedAt), validUntil: Number(item.validUntil || 0) })),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/**
+ * Admin-only contract operation. The granted identity is deliberately not
+ * returned in the portal response, keeping the Trust Registry presentation
+ * focused on the decision rather than personal or wallet data.
+ */
+router.post("/blockchain/access-grants", requireSession, async (req, res) => {
+  if (req.erpUser.role_key !== "ERP_ADMIN") return res.status(403).json({ error: "Administrator permission required." });
+  const did = String(req.body?.did || "").trim();
+  const resourceId = String(req.body?.resourceId || "").trim();
+  const durationHours = Number(req.body?.durationHours);
+  if (!did || !resourceId || !Number.isInteger(durationHours)) return res.status(400).json({ error: "Select a verified identity, protected resource, and whole-hour access duration." });
+  try {
+    const accessContract = getContract("AccessControlManager", personas.ADMIN.signer);
+    const resource = await accessContract.getResource(resourceId);
+    const sensitivityLabel = resource[1];
+    const policy = chainAccessPolicy(sensitivityLabel);
+    if (durationHours < 1 || durationHours > policy.maxHours) return res.status(400).json({ error: `${sensitivityLabel} policy permits access from 1 to ${policy.maxHours} hours.` });
+    const validUntil = now() + durationHours * 60 * 60;
+    const tx = await accessContract.grantAccessUntil(did, resourceId, validUntil, { nonce: await getLatestNonce(personas.ADMIN.signer.address) });
+    const receipt = await tx.wait();
+    await logEvent({ employeeId: req.erpUser.employee_id, action: "BLOCKCHAIN_TIME_BOUND_ACCESS_GRANTED", targetId: resourceId, result: "SUCCESS", reason: `${sensitivityLabel} grant valid for ${durationHours} hours`, visibility: "AUDIT_ONLY" });
+    res.json({
+      message: `Time-bound access is confirmed for ${durationHours} hour${durationHours === 1 ? "" : "s"}.`,
+      receipt: policyReceipt({ decision: "ALLOW", resourceId, sensitivityLabel, blockNumber: receipt.blockNumber, validUntil }),
+    });
+  } catch (err) { res.status(400).json({ error: err.reason || err.message }); }
+});
+
+router.post("/blockchain/access-revocations", requireSession, async (req, res) => {
+  if (req.erpUser.role_key !== "ERP_ADMIN") return res.status(403).json({ error: "Administrator permission required." });
+  const did = String(req.body?.did || "").trim();
+  const resourceId = String(req.body?.resourceId || "").trim();
+  if (!did || !resourceId) return res.status(400).json({ error: "Select a verified identity and protected resource." });
+  try {
+    const accessContract = getContract("AccessControlManager", personas.ADMIN.signer);
+    const resource = await accessContract.getResource(resourceId);
+    const tx = await accessContract.revokeAccess(did, resourceId, { nonce: await getLatestNonce(personas.ADMIN.signer.address) });
+    const receipt = await tx.wait();
+    await logEvent({ employeeId: req.erpUser.employee_id, action: "BLOCKCHAIN_ACCESS_REVOKED", targetId: resourceId, result: "SUCCESS", reason: "Explicit deny recorded on the blockchain", visibility: "AUDIT_ONLY" });
+    res.json({
+      message: "Access has been revoked. The contract now denies this explicit grant.",
+      receipt: policyReceipt({ decision: "DENY", resourceId, sensitivityLabel: resource[1], blockNumber: receipt.blockNumber }),
+    });
+  } catch (err) { res.status(400).json({ error: err.reason || err.message }); }
 });
 
 const canUseAssetPassport = (roleKey) => ["ERP_ADMIN", "ENGINEERING_OFFICER", "LOGISTICS_OFFICER"].includes(roleKey);

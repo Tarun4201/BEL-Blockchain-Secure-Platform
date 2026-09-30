@@ -83,6 +83,7 @@ async function parseEventLog(contractName, eventName, log) {
       targetId = args[1]; // resourceId
       details.beneficiaryDid = args[0];
       details.grantedBy = args[2];
+      details.validUntil = Number(args[4] || 0);
       break;
 
     case "AccessRevoked":

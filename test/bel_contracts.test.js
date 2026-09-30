@@ -92,6 +92,30 @@ describe("BEL Blockchain Platform Contracts", function () {
       expect(await accessControl.hasAccess(did, resId)).to.be.false;
     });
 
+    it("should automatically deny an explicit grant after its on-chain expiry", async function () {
+      const latest = await ethers.provider.getBlock("latest");
+      const validUntil = BigInt(latest.timestamp + 60);
+
+      await accessControl.grantAccessUntil(did, resId, validUntil);
+      expect(await accessControl.hasAccess(did, resId)).to.be.true;
+
+      const record = await accessControl.getAccessRecord(did, resId);
+      expect(record.validUntil).to.equal(validUntil);
+
+      await ethers.provider.send("evm_increaseTime", [61]);
+      await ethers.provider.send("evm_mine", []);
+      expect(await accessControl.hasAccess(did, resId)).to.be.false;
+    });
+
+    it("should keep an explicit revocation effective even when the role policy allows access", async function () {
+      await accessControl.setRolePermission(resId, "ENGINEER", true);
+      expect(await accessControl.hasAccess(did, resId)).to.be.true;
+
+      await accessControl.grantAccess(did, resId);
+      await accessControl.revokeAccess(did, resId);
+      expect(await accessControl.hasAccess(did, resId)).to.be.false;
+    });
+
     it("should enforce administrator-defined RBAC policies for registered identities", async function () {
       expect(await accessControl.hasAccess(did, resId)).to.be.false;
       await accessControl.setRolePermission(resId, "ENGINEER", true);

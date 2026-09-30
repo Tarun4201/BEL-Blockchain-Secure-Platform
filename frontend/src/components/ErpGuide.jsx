@@ -1,7 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { erpApi } from '../api/client';
 
-const TOUR_VERSION = '1.1';
+const TOUR_VERSION = '1.3';
+
+const FEATURE_EXPLANATIONS = {
+  identity: 'Review the minimum identity information needed for your authorised work. Protected credentials and blockchain identifiers remain private.',
+  users: 'Review authorised roles and responsibilities. Only administrators can make role or policy decisions.',
+  'digital-assets': 'Browse the protected digital-asset register and open a passport to understand a record’s lifecycle.',
+  'asset-passport': 'Inspect a protected asset lifecycle, custody state, and verification evidence without exposing underlying identifiers.',
+  'asset-passport-common': 'Inspect a protected asset lifecycle, custody state, and verification evidence without exposing underlying identifiers.',
+  'access-requests': 'Request only the access you need, explain the purpose, and track the administrator’s decision. You cannot approve your own request.',
+  'access-control': 'Request only the access you need, explain the purpose, and track the administrator’s decision. You cannot approve your own request.',
+  permissions: 'View the permissions available to your role. Administrators grant or revoke access; other roles can request it for approval.',
+  'temporary-access': 'Check time-bound access records. Access expires automatically, which keeps the portal least-privilege by default.',
+  verification: 'Run a privacy-preserving verification that shows only the claim required for the current decision.',
+  'audit-common': 'Follow the protected audit timeline to understand who performed an authorised action, what changed, and when it was recorded.',
+  audit: 'Follow the protected audit timeline to understand who performed an authorised action, what changed, and when it was recorded.',
+  'blockchain-activity': 'See the simple evidence flow from user action through protected services to the ledger, plus recent safe transaction summaries.',
+  blockchain: 'See the simple evidence flow from user action through protected services to the ledger, plus recent safe transaction summaries.',
+  'security-insights': 'Review grouped security signals without exposing sensitive activity content. Administrators can acknowledge and investigate signals.',
+  'security-signals': 'Review grouped security signals without exposing sensitive activity content. Administrators can acknowledge and investigate signals.',
+  'architecture-common': 'Explore how the application, protected services, policy controls, and immutable ledger work together.',
+  architecture: 'Explore how the application, protected services, policy controls, and immutable ledger work together.',
+  profile: 'Confirm your role, workspace, and access posture. These assignments determine which functions are available to you.',
+  settings: 'Manage safe display and notification preferences for this portal. Identity and credential information remains protected.',
+};
 
 const ROLE_TOURS = {
   PROCUREMENT_OFFICER: [
@@ -40,22 +63,40 @@ const GENERIC_TOUR = [
   ['profile-details', 'profile', 'Your profile', 'Your role, unit, department, and SBU determine your access.'],
 ];
 
+const COMPLEX_WORKFLOW_IDS = [
+  'identity',
+  'asset-passport',
+  'asset-passport-common',
+  'access-requests',
+  'access-control',
+  'permissions',
+  'verification',
+  'audit',
+  'audit-common',
+  'blockchain-activity',
+  'blockchain',
+];
+
+const ADMIN_COMPLEX_WORKFLOW_IDS = ['security-insights', 'security-signals', 'architecture', 'architecture-common'];
+
 function tourFor(user, modules) {
-  const configured = ROLE_TOURS[user.roleKey] || GENERIC_TOUR;
-  const allowed = new Set(modules.map((module) => module.id));
-  return configured
-    .filter(([, module]) => !module || allowed.has(module))
-    .map(([target, module, title, description]) => {
-      const resolvedModule = module || modules.find((item) => item.id !== 'dashboard')?.id || 'dashboard';
-      const resolvedTarget = target === 'sidebar-first-module' ? `sidebar-${resolvedModule}` : target;
-      return {
-      id: resolvedTarget,
-      target: `[data-tour="${resolvedTarget}"]`,
-      module: resolvedModule,
-      title,
-      description,
-    };
-    });
+  const dashboard = modules.find((module) => module.id === 'dashboard');
+  const overview = dashboard ? [{
+    id: 'dashboard-overview', target: '[data-tour="dashboard-overview"]', module: 'dashboard', title: 'Your role-aware dashboard',
+    description: user.roleKey === 'ERP_ADMIN' ? 'Start here to review the operational picture, approval queue, security posture, and protected evidence feed.' : 'Start here to review the work, access, and evidence that are authorised for your workspace.',
+  }] : [];
+  const complexWorkflows = new Set([
+    ...COMPLEX_WORKFLOW_IDS,
+    ...(user.roleKey === 'ERP_ADMIN' ? ADMIN_COMPLEX_WORKFLOW_IDS : []),
+  ]);
+  const features = modules.filter((module) => complexWorkflows.has(module.id)).map((module) => ({
+    id: `sidebar-${module.id}`,
+    target: `[data-tour="sidebar-${module.id}"]`,
+    module: module.id,
+    title: module.label,
+    description: FEATURE_EXPLANATIONS[module.id] || `Open ${module.label} to review the protected records and actions authorised for your current role.`,
+  }));
+  return [...overview, ...features];
 }
 
 function BeliaAvatar({ mood = 'explaining' }) {
@@ -77,7 +118,7 @@ function Welcome({ progress, onStart, onRestart, onExit }) {
       <BeliaAvatar mood="welcome" />
       <p className="belia-eyebrow">BEL INTELLIGENT ASSISTANT</p>
       <h1 id="belia-welcome-title">{incomplete ? 'Your ERP introduction is incomplete.' : 'Welcome to BEL ERP'}</h1>
-      <p>{incomplete ? "BELIA saved your progress. Continue where you stopped, or restart the introduction for your current role." : "I’ll guide you through the tools and features available to you based on your role."}</p>
+      <p>{incomplete ? "BELIA saved your progress. Continue where you stopped, or restart the introduction for your current role." : "I’ll introduce only the important, multi-step workflows for your role."}</p>
       <div className="belia-welcome-actions">
         <button className="erp-primary" onClick={onStart}>{incomplete ? 'Continue Tour' : 'Start Guided Tour'}</button>
         {incomplete && <button className="erp-secondary" onClick={onRestart}>Restart Tour</button>}
@@ -94,9 +135,9 @@ function GuideHub({ user, progress, modules, onStart, onRestart, onClose, adminS
       <button className="belia-close" onClick={onClose} aria-label="Close ERP Guide">×</button>
       <div className="belia-hub-heading"><BeliaAvatar mood={completed ? 'success' : 'explaining'} /><div><p className="belia-eyebrow">BEL ERP GUIDE v{TOUR_VERSION}</p><h2 id="belia-hub-title">Hello, {user.fullName.split(' ')[0]}</h2><p>{completed ? 'ERP Orientation: Completed' : 'Your role-specific introduction is ready.'}</p></div></div>
       <div className="belia-hub-grid">
-        <article><h3>Guided tour</h3><p>Let BELIA highlight the actual controls available to you.</p><button className="erp-primary" onClick={onStart}>{completed ? 'Restart Guided Tour' : 'Continue Learning'}</button>{!completed && <button className="belia-text-button" onClick={onRestart}>Start from step 1</button>}</article>
+        <article><h3>Guided tour</h3><p>BELIA covers the important multi-step workflows for your role and places a clear outline around each navigation control.</p><button className="erp-primary" onClick={onStart}>{completed ? 'Restart Guided Tour' : 'Continue Learning'}</button>{!completed && <button className="belia-text-button" onClick={onRestart}>Start from step 1</button>}</article>
         <article><h3>My permissions</h3><p>Your current access is based on your registered department, role, SBU, and approved permissions.</p><ul><li>{user.role}</li><li>{user.department}</li><li>{user.sbu}</li></ul></article>
-        <article><h3>Available modules</h3><p>BELIA will only guide you to modules that you are authorized to use.</p><div className="belia-module-tags">{modules.filter((item) => item.id !== 'dashboard' && item.id !== 'profile').map((item) => <span key={item.id}>{item.label}</span>)}</div></article>
+        <article><h3>Available modules</h3><p>All authorised modules remain available in navigation; the tour focuses only on complex workflows.</p><div className="belia-module-tags">{modules.filter((item) => item.id !== 'dashboard' && item.id !== 'profile').map((item) => <span key={item.id}>{item.label}</span>)}</div></article>
         <article><h3>Practice mode</h3><p>Training mode is planned for a future demo release. It will never create real ERP transactions.</p><span className="belia-soon">TRAINING / DEMO</span></article>
       </div>
       {user.roleKey === 'ERP_ADMIN' && adminStats && <section className="belia-admin-stats"><h3>Guide Management</h3><p>{adminStats.completed} completed · {adminStats.inProgress} in progress · {adminStats.notStarted} not started</p></section>}
@@ -200,8 +241,7 @@ export function ErpGuide({ sessionToken, user, modules, activeModule, onNavigate
     top: Math.min(Math.max(16, targetRect.top), window.innerHeight - 280),
   } : { left: '50%', top: '50%' };
   return <><GuideLauncher incomplete={progress.status !== 'COMPLETED'} onOpen={() => setMode('hub')} />{mode === 'tour' && <div className="belia-tour" aria-live="polite">
-    <div className="belia-overlay" />
-    {targetRect && <div className="belia-spotlight" style={{ left: targetRect.left - 7, top: targetRect.top - 7, width: targetRect.width + 14, height: targetRect.height + 14 }} />}
-    <section className="belia-tour-card" style={panelStyle} role="dialog" aria-modal="true"><div className="belia-tour-top"><BeliaAvatar mood={missing ? 'attention' : stepIndex === steps.length - 1 ? 'success' : 'explaining'} /><div><p className="belia-eyebrow">{user.role} · STEP {stepIndex + 1} OF {steps.length}</p><h2>{missing ? "BELIA couldn't locate this feature" : current.title}</h2></div><button className="belia-close" onClick={exitTour} aria-label="Exit tour">×</button></div><p>{missing ? 'The page may still be loading. You can try again or safely skip this step.' : current.description}</p>{missing && <div className="belia-actions"><button className="erp-secondary" onClick={() => { setMissing(false); onNavigate(current.module); }}>Try Again</button><button className="erp-primary" onClick={advance}>Skip Step</button></div>} {!missing && <><div className="belia-progress"><span style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }} /></div><div className="belia-actions"><button className="erp-secondary" onClick={previous} disabled={stepIndex === 0}>Previous</button><button className="erp-primary" onClick={advance}>{stepIndex === steps.length - 1 ? 'Finish Tour' : 'Next'}</button></div></>}</section>
+    {targetRect && <div className="belia-focus-box" aria-hidden="true" style={{ left: targetRect.left - 7, top: targetRect.top - 7, width: targetRect.width + 14, height: targetRect.height + 14 }} />}
+    <section className="belia-tour-card" style={panelStyle} role="dialog" aria-modal="true"><div className="belia-tour-top"><BeliaAvatar mood={missing ? 'attention' : stepIndex === steps.length - 1 ? 'success' : 'explaining'} /><div><p className="belia-eyebrow">{user.role} · FEATURE {stepIndex + 1} OF {steps.length}</p><h2>{missing ? "BELIA couldn't locate this feature" : current.title}</h2></div><button className="belia-close" onClick={exitTour} aria-label="Exit tour">×</button></div><p>{missing ? 'The page may still be loading. You can try again or safely skip this step.' : current.description}</p>{missing && <div className="belia-actions"><button className="erp-secondary" onClick={() => { setMissing(false); onNavigate(current.module); }}>Try Again</button><button className="erp-primary" onClick={advance}>Skip Step</button></div>} {!missing && <><div className="belia-progress"><span style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }} /></div><div className="belia-actions"><button className="belia-focus-button" onClick={() => onNavigate(current.module)}>Show feature</button><button className="erp-secondary" onClick={previous} disabled={stepIndex === 0}>Previous</button><button className="erp-primary" onClick={advance}>{stepIndex === steps.length - 1 ? 'Finish Tour' : 'Next'}</button></div></>}</section>
   </div>}</>;
 }
