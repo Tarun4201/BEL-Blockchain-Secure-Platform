@@ -12,6 +12,8 @@ backend/node_modules/
 *.env
 backend/.env
 frontend/.env
+!.env.example
+!trustgrid/.env.example
 
 # SQLite Database & Storage (Runtime data generated per machine)
 *.db
