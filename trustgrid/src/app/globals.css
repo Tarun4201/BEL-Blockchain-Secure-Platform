@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  --color-navy-950: #061b2e;
+  --color-navy-800: #082f49;
+  --color-blue-600: #0d87b8;
+  --color-sky-50: #eaf6fb;
+  --color-saffron-500: #e8891d;
+  --color-green-600: #168557;
+  --color-amber-600: #b7791f;
+  --color-red-600: #b42318;
+  --color-ink-900: #0b1f2e;
+  --color-ink-600: #3e5566;
+  --color-ink-400: #6b8394;
+  --color-page: #f5f8fa;
+  --color-card: #ffffff;
+  --color-line: #d6e2ea;
+
+  --shadow-soft: 0 1px 2px rgba(6, 27, 46, 0.08);
+  --shadow-card: 0 8px 24px rgba(6, 27, 46, 0.08);
+  --shadow-glow: 0 0 20px rgba(13, 135, 184, 0.3);
+
+  --animate-shake: shake 0.2s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* ── Base (layered so utilities can override) ── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #f1f5f9;
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 24px;
+    min-height: 100vh;
+    background-image:
+      /* Ambient Cyan Radar Glow (Top-Left) */
+      radial-gradient(circle at 12% 0%, rgba(13, 135, 184, 0.14) 0%, transparent 45%),
+      /* Ambient Sovereign Saffron Aura (Top-Right) */
+      radial-gradient(circle at 88% 0%, rgba(232, 137, 29, 0.10) 0%, transparent 40%),
+      /* Gentle Central Command Radial Glow */
+      radial-gradient(ellipse at 50% 30%, rgba(13, 135, 184, 0.05) 0%, transparent 65%),
+      /* Tactical Radar Coordinate Micro-Dot Matrix (28px pitch) */
+      radial-gradient(circle, rgba(13, 135, 184, 0.18) 1.2px, transparent 1.2px),
+      /* Subtle Coordinate Blueprint Grid Lines (28px pitch) */
+      linear-gradient(to right, rgba(8, 47, 73, 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(8, 47, 73, 0.04) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px, 28px 28px, 28px 28px;
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4 { font-weight: 700; color: var(--color-navy-800); letter-spacing: -0.02em; }
+  h1 { font-size: 44px; line-height: 52px; }
+  h2 { font-size: 32px; line-height: 40px; }
+  h3 { font-size: 24px; line-height: 32px; }
+  h4 { font-size: 20px; line-height: 28px; }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d6e2ea; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-400); }
+
+/* ── Focus visible ── */
+:focus-visible {
+  outline: 2px solid var(--color-blue-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Skip link ── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 8px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--color-navy-800);
+  color: #fff;
+  border-radius: 0 0 8px 8px;
+  font-weight: 600;
+  transition: top 0.2s;
+}
+.skip-link:focus { top: 0; }
+
+/* ── Shimmer skeleton ── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #e8eff5 25%,
+    #f5f8fa 50%,
+    #e8eff5 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite linear;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ── Hash chip ── */
+.hash-chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--color-sky-50);
+  border: 1px solid #d6e2ea;
+  border-radius: 6px;
+  padding: 2px 8px;
+  color: var(--color-blue-600);
+  cursor: pointer;
+  transition: background 0.15s;
+  letter-spacing: 0.02em;
+}
+.hash-chip:hover { background: #d2ecf7; }
+
+/* ── Ledger ticker ── */
+.ledger-ticker {
+  display: flex;
+  gap: 24px;
+  animation: ticker 30s linear infinite;
+  white-space: nowrap;
+}
+.ledger-ticker:hover { animation-play-state: paused; }
+
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── Classification badge watermark ── */
+.document-watermark::after {
+  content: "FICTIONAL DEMO";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: rgba(11, 31, 46, 0.06);
+  transform: rotate(-30deg);
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: 4px;
+}
+
+/* ── Tricolour header hairline ── */
+.tricolour-bar {
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    #FF9933 33.33%,
+    #FFFFFF 33.33% 66.66%,
+    #138808 66.66%
+  );
+}
+
+/* ── Chain pipeline animation ── */
+.pipeline-step { transition: all 0.4s cubic-bezier(.22,1,.36,1); }
+.pipeline-step.active { color: var(--color-blue-600); }
+.pipeline-step.done { color: var(--color-green-600); }
+
+/* ── Tour spotlight ── */
+.tour-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  background: rgba(6, 27, 46, 0.75);
+  backdrop-filter: blur(2px);
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .ledger-ticker { animation: none; }
+  .skeleton { animation: none; background: #e8eff5; }
+}
+
+/* ── Print ── */
+@media print {
+  .no-print { display: none !important; }
+}
